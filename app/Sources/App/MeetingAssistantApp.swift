@@ -26,4 +26,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         model.start()
     }
+
+    /// Quitting while recording: finish the audio file and meta.json first, then quit.
+    /// `.terminateLater` tells macOS to wait until `reply(toApplicationShouldTerminate:)`.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard model.isRecording else { return .terminateNow }
+        Task {
+            await model.prepareForTermination()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
 }

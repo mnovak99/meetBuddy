@@ -1,31 +1,50 @@
+import AppKit
+import EventKit
 import Foundation
 import Observation
 import UserNotifications
 
-/// Central app state shown by the menu bar UI. Runs the detection loop and reacts to its events.
+/// Central app state shown by the menu bar UI. Runs the detection loop, starts and stops
+/// recordings and reacts to the user's choices.
 ///
 /// `@Observable` makes SwiftUI views re-render automatically when a property they read changes.
 /// Properties marked `@ObservationIgnored` are internal plumbing that the UI never reads.
 @Observable
 final class AppModel {
+    /// A finished recording shorter than `minDurationMinutes`, waiting for "Zahodit / Ponechat".
+    struct ShortRecording {
+        var meta: RecordingMeta
+        var folder: URL
+    }
+
     private(set) var config = AppConfig()
     private(set) var configProblem: String?
     private(set) var state: DetectorState = .idle
     private(set) var signals: [MeetingSource: SourceSignals] = [:]
+    private(set) var recording: RecordingController?
+    private(set) var pendingShortRecording: ShortRecording?
     private(set) var screenRecordingGranted = false
     private(set) var notificationStatus: UNAuthorizationStatus = .notDetermined
     private(set) var notificationAlertStyle: UNAlertStyle = .none
+    private(set) var calendarStatus: EKAuthorizationStatus = .notDetermined
 
     @ObservationIgnored private var screenRecordingGrantedAtLaunch = false
     @ObservationIgnored private var detector = MeetingDetector(settings: DetectorSettings(config: AppConfig()))
     @ObservationIgnored private let notifications = NotificationManager()
+    @ObservationIgnored private let calendar = CalendarLookup()
     @ObservationIgnored private let snapshotProvider = SnapshotProvider()
+    @ObservationIgnored private var lastSnapshot: SystemSnapshot?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
     @ObservationIgnored private var loggedSignals: [MeetingSource: SourceSignals] = [:]
+    @ObservationIgnored private var isFinishingRecording = false
 
     /// Granted in System Settings, but window titles appear only after a restart.
     var screenRecordingNeedsRestart: Bool {
         screenRecordingGranted && !screenRecordingGrantedAtLaunch
+    }
+
+    var isRecording: Bool {
+        recording != nil
     }
 
     init() {
@@ -40,6 +59,7 @@ final class AppModel {
         Log.app.info("Meeting Assistant \(version, privacy: .public) starting")
         notifications.configure()
         loadConfig()
+        RecordingRecovery.closeInterrupted(in: RecordingFolder.recordingsDirectory)
 
         screenRecordingGrantedAtLaunch = ScreenRecordingPermission.isGranted
         screenRecordingGranted = screenRecordingGrantedAtLaunch
@@ -50,10 +70,16 @@ final class AppModel {
             ScreenRecordingPermission.request()
         }
 
+        // One system prompt after another: notifications first, then the calendar.
         Task {
             await notifications.requestAuthorization()
             await refreshNotificationSettings()
+            if calendar.status == .notDetermined {
+                await calendar.requestAccess()
+            }
+            calendarStatus = calendar.status
         }
+        observePowerOff()
         startPolling()
     }
 
@@ -66,8 +92,11 @@ final class AppModel {
 
     func record(_ sessionID: UUID) {
         guard detector.accept(sessionID, now: .now) else { return ignoreStale("Ano") }
-        Log.detection.notice("User chose: record (step 1: simulated, nothing is captured)")
+        Log.detection.notice("User chose: record")
         finishChoice(sessionID)
+        if case .recording(let session) = detector.state {
+            startRecording(session)
+        }
     }
 
     func dontRecord(_ sessionID: UUID) {
@@ -80,6 +109,7 @@ final class AppModel {
         guard detector.stop(sessionID) else { return ignoreStale("Ukončit") }
         Log.detection.notice("User chose: stop recording")
         finishChoice(sessionID)
+        Task { await finishRecording(reason: .user) }
     }
 
     func keepRecording(_ sessionID: UUID) {
@@ -88,7 +118,136 @@ final class AppModel {
         finishChoice(sessionID)
     }
 
-    // MARK: - Private
+    /// "Nahrávat ručně": record the app now, without a detection (explicit user choice).
+    func startManualRecording(_ source: MeetingSource) {
+        guard recording == nil else { return }
+        // A detected meeting of the same app is waiting for an answer: that is a plain "Ano".
+        if case .detected(let session) = detector.state, session.source == source {
+            return record(session.id)
+        }
+        if let previous = detector.state.session {
+            notifications.removeNotifications(for: previous.id)
+        }
+        let sourceSignals = signals[source] ?? SourceSignals()
+        let window = sourceSignals.meetingWindow ?? sourceSignals.candidateWindows.first
+        guard let session = detector.startManual(source: source, window: window, now: .now) else { return }
+        Log.detection.notice("User started a manual recording: \(source.rawValue, privacy: .public)")
+        syncState()
+        startRecording(session)
+    }
+
+    /// The user picked the window to take frames from ("Okno pro snímky").
+    func selectWindow(_ window: WindowInfo) {
+        guard let recording, detector.setWindow(window, for: recording.session.id) else { return }
+        Log.recording.info("Frames window changed to \(window.title ?? "–", privacy: .public)")
+        recording.switchWindow(to: window)
+        syncState()
+    }
+
+    func discardShortRecording() {
+        guard let pending = pendingShortRecording else { return }
+        pendingShortRecording = nil
+        notifications.removeNotifications(for: pending.meta.id)
+        do {
+            // To the Trash, not deleted: the user can still restore it.
+            try FileManager.default.trashItem(at: pending.folder, resultingItemURL: nil)
+            Log.recording.notice("Short recording moved to Trash: \(pending.folder.lastPathComponent, privacy: .public)")
+        } catch {
+            Log.recording.error("Cannot move recording to Trash: \(String(describing: error), privacy: .public)")
+            notifications.postInfo(
+                title: "Záznam nejde přesunout do Koše", body: error.localizedDescription,
+                identifier: "trash-\(pending.meta.id.uuidString)")
+        }
+    }
+
+    func keepShortRecording() {
+        guard let pending = pendingShortRecording else { return }
+        pendingShortRecording = nil
+        notifications.removeNotifications(for: pending.meta.id)
+        Log.recording.info("Short recording kept: \(pending.folder.lastPathComponent, privacy: .public)")
+    }
+
+    /// Before the app quits: close a running recording properly.
+    func prepareForTermination() async {
+        await finishRecording(reason: .appQuit)
+    }
+
+    // MARK: - Recording
+
+    private func startRecording(_ session: MeetingSession) {
+        let event = calendar.event(at: session.acceptedAt ?? .now)
+        do {
+            let controller = try RecordingController(
+                session: session, tappedBundleIDs: tappedBundleIDs(for: session.source),
+                calendarEvent: event, config: config)
+            controller.onWindowAvailabilityChanged = { [weak self] available in
+                self?.windowAvailabilityChanged(available)
+            }
+            recording = controller
+            if let audioError = controller.audioError {
+                notifications.postInfo(
+                    title: "Zvuk se nenahrává", body: audioError,
+                    identifier: "audio-error-\(session.id.uuidString)")
+            }
+        } catch {
+            Log.recording.error("Cannot start recording: \(String(describing: error), privacy: .public)")
+            notifications.postInfo(
+                title: "Nahrávání se nespustilo", body: error.localizedDescription,
+                identifier: "start-error-\(session.id.uuidString)")
+            _ = detector.stop(session.id)
+            syncState()
+        }
+    }
+
+    private func finishRecording(reason: RecordingEndReason) async {
+        guard let recording, !isFinishingRecording else { return }
+        isFinishingRecording = true
+        let meta = await recording.finish(reason: reason)
+        self.recording = nil
+        isFinishingRecording = false
+
+        let minimum = config.minDurationMinutes * 60
+        if reason == .user, let duration = meta.durationSeconds, duration < minimum {
+            pendingShortRecording = ShortRecording(meta: meta, folder: recording.folder)
+            notifications.postShortRecording(meta)
+        }
+    }
+
+    /// Bundle IDs to tap: the app itself and every helper process of it that talks to Core Audio.
+    private func tappedBundleIDs(for source: MeetingSource) -> [String] {
+        let helpers = (lastSnapshot?.audioProcesses ?? [])
+            .map(\.bundleID)
+            .filter { source.owns(bundleID: $0) }
+        return Array(Set(helpers + [source.appBundleID])).sorted()
+    }
+
+    private func windowAvailabilityChanged(_ available: Bool) {
+        guard let recording else { return }
+        if available {
+            Log.recording.info("Meeting window can be captured again")
+        } else {
+            notifications.postInfo(
+                title: "Okno meetingu nejde snímat",
+                body: "Je minimalizované nebo zavřené? Zvuk se nahrává dál, snímky obrazovky ne.",
+                identifier: "window-\(recording.session.id.uuidString)")
+        }
+    }
+
+    /// Close a running recording when the Mac shuts down (the system waits a little for apps).
+    private func observePowerOff() {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willPowerOffNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            // queue: .main means this runs on the main thread; tell Swift so.
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                Log.app.notice("Mac is shutting down")
+                Task { await self.finishRecording(reason: .powerOff) }
+            }
+        }
+    }
+
+    // MARK: - Polling
 
     private func loadConfig() {
         let result = ConfigStore.load()
@@ -112,8 +271,10 @@ final class AppModel {
     private func poll() async {
         refreshScreenRecording()
         await refreshNotificationSettings()
+        calendarStatus = calendar.status
 
         let snapshot = snapshotProvider.capture(watching: MeetingSource.allCases)
+        lastSnapshot = snapshot
         let events = detector.process(snapshot, now: .now)
         signals = detector.signals
         logSignalChanges()
@@ -121,6 +282,28 @@ final class AppModel {
             handle(event)
         }
         syncState()
+        refreshRecordingStatus()
+    }
+
+    private func refreshRecordingStatus() {
+        guard let recording else { return }
+        let source = recording.session.source
+        let wasSilent = recording.silenceSuspected
+        let hadAudioError = recording.audioError != nil
+        recording.refreshStatus(appIsPlaying: signals[source]?.audioOutputActive ?? false, now: .now)
+        if let audioError = recording.audioError, !hadAudioError {
+            notifications.postInfo(
+                title: "Zvuk se nenahrává", body: audioError,
+                identifier: "audio-error-\(recording.session.id.uuidString)")
+        }
+        if recording.silenceSuspected && !wasSilent {
+            notifications.postInfo(
+                title: "Nahrává se jen ticho",
+                body: "\(source.displayName) hraje, ale nahrávka je už 2 min úplně tichá. "
+                    + "Zkontroluj Nastavení systému → Soukromí a zabezpečení → "
+                    + "Nahrávání obrazovky a systémového zvuku → Meeting Assistant.",
+                identifier: "silence-\(recording.session.id.uuidString)")
+        }
     }
 
     private func handle(_ event: DetectorEvent) {
@@ -149,6 +332,10 @@ final class AppModel {
         case .dontRecord: dontRecord(sessionID)
         case .stop: stopRecording(sessionID)
         case .keepRecording: keepRecording(sessionID)
+        case .discardShortRecording:
+            if pendingShortRecording?.meta.id == sessionID { discardShortRecording() }
+        case .keepShortRecording:
+            if pendingShortRecording?.meta.id == sessionID { keepShortRecording() }
         }
     }
 

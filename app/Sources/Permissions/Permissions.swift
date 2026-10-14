@@ -23,6 +23,10 @@ enum SystemSettingsLink {
         open("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
     }
 
+    static func openCalendars() {
+        open("x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")
+    }
+
     static func openNotifications() {
         let bundleID = Bundle.main.bundleIdentifier ?? ""
         open("x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(bundleID)")

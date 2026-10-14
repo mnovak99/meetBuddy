@@ -10,6 +10,9 @@ nonisolated struct SourceSignals: Equatable, Sendable {
     var windowTitles: [String] = []
     /// Best guess of the meeting window. Nil when there is none or titles are unavailable.
     var meetingWindow: WindowInfo?
+    /// All titled windows of the app, newest first: choices for "Okno pro snímky" in the menu.
+    /// Never logged (for Brave they include ordinary browsing).
+    var candidateWindows: [WindowInfo] = []
     /// All signals required by the source's rule are present.
     var isMeeting = false
 
@@ -37,6 +40,7 @@ nonisolated enum MeetingRules {
         signals.isRunning = snapshot.runningBundleIDs.contains(source.appBundleID)
         signals.audioOutputBundleIDs = uniqueSorted(audio.filter(\.isRunningOutput).map(\.bundleID))
         signals.audioInputBundleIDs = uniqueSorted(audio.filter(\.isRunningInput).map(\.bundleID))
+        signals.candidateWindows = titledWindows.sorted { $0.id > $1.id }
 
         switch source {
         case .meet:
@@ -72,13 +76,12 @@ nonisolated enum MeetingRules {
     static func presence(
         of session: MeetingSession, signals: SourceSignals, in snapshot: SystemSnapshot
     ) -> SessionPresence {
-        switch session.source {
-        case .meet:
+        let windowStillOpen = session.windowID.map { id in snapshot.windows.contains { $0.id == id } } ?? false
+        // A manual recording (e.g. a video in Brave) has no Meet window: it stands on audio.
+        if session.source == .meet && !session.isManual {
             return SessionPresence(primary: signals.meetingWindow != nil, secondary: signals.audioOutputActive)
-        case .teams, .discord:
-            let windowStillOpen = session.windowID.map { id in snapshot.windows.contains { $0.id == id } } ?? false
-            return SessionPresence(primary: signals.audioOutputActive, secondary: windowStillOpen)
         }
+        return SessionPresence(primary: signals.audioOutputActive, secondary: windowStillOpen)
     }
 
     private static func uniqueSorted(_ values: [String]) -> [String] {

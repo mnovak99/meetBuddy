@@ -40,12 +40,22 @@
     "enabledSources": {
       "description": "Meeting sources to detect.",
       "type": "array",
-      "items": { "enum": ["teams", "meet", "discord"] },
+      "items": {
+        "enum": [
+          "teams",
+          "meet",
+          "discord"
+        ]
+      },
       "uniqueItems": true,
-      "default": ["teams", "meet", "discord"]
+      "default": [
+        "teams",
+        "meet",
+        "discord"
+      ]
     },
     "minDurationMinutes": {
-      "description": "Recordings shorter than this are discarded.",
+      "description": "Recordings shorter than this are offered for discarding (notification Zahodit / Ponechat).",
       "type": "number",
       "minimum": 0,
       "default": 5
@@ -63,6 +73,13 @@
       "minimum": 320,
       "maximum": 4096,
       "default": 1600
+    },
+    "frameChangeThreshold": {
+      "description": "Share of the perceptual hash (0–1) that must change before a new frame is saved. Lower = more frames.",
+      "type": "number",
+      "minimum": 0.01,
+      "maximum": 1,
+      "default": 0.08
     },
     "audioRetentionDays": {
       "description": "Audio files older than this are offered for deletion.",

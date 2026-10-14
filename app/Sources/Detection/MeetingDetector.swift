@@ -12,6 +12,8 @@ nonisolated struct MeetingSession: Equatable, Sendable, Identifiable {
     var acceptedAt: Date?
     /// Set when the meeting has probably ended during recording; cleared when it continues.
     var probableEndAt: Date?
+    /// Started from the menu ("Nahrávat ručně"), not by a detection.
+    var isManual = false
 }
 
 nonisolated enum DetectorState: Equatable, Sendable {
@@ -136,6 +138,28 @@ nonisolated struct MeetingDetector {
             suppressed.insert(session.source)
         }
         resetToIdle()
+        return true
+    }
+
+    /// "Nahrávat ručně": record the app right away, without waiting for a detection.
+    /// Returns nil while something is already being recorded.
+    mutating func startManual(source: MeetingSource, window: WindowInfo?, now: Date) -> MeetingSession? {
+        if case .recording = state { return nil }
+        let session = MeetingSession(
+            id: UUID(), source: source, detectedAt: now, windowID: window?.id, windowTitle: window?.title,
+            acceptedAt: now, isManual: true)
+        state = .recording(session)
+        lastPrimaryAt = now
+        lastAnySignalAt = now
+        return session
+    }
+
+    /// The user picked another window for the running session.
+    mutating func setWindow(_ window: WindowInfo, for id: UUID) -> Bool {
+        guard case .recording(var session) = state, session.id == id else { return false }
+        session.windowID = window.id
+        session.windowTitle = window.title
+        state = .recording(session)
         return true
     }
 

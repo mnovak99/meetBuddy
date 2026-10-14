@@ -34,11 +34,12 @@ docs/       rozhodnutí a poznámky
 - Signály: běžící appka + titulek okna + aktivní audio procesu (Core Audio process objects, macOS 14.4+). Meeting nemusí být v popředí, uživatel bývá ztlumený.
 - Po detekci notifikace „Nahrávat?“ (Ano / Ne). **Nikdy nenahrávat bez potvrzení.**
 - Pravděpodobný konec (okno zavřené, audio ticho N minut) → notifikace. Ukončení ručně nebo z notifikace.
-- Záznamy kratší než `minDurationMinutes` (výchozí 5) zahodit.
+- Záznamy kratší než `minDurationMinutes` (výchozí 5) nabídnout k zahození notifikací (Zahodit / Ponechat). Bez odpovědi ponechat, zahozené jdou do Koše.
+- Ruční start nahrávání z menu (výslovná volba uživatele, např. když detekce selže).
 
 **Zvuk**
 - **Nahrávat jen zvuk meeting aplikace. Mikrofon nikdy.** Appka nesmí žádat o přístup k mikrofonu.
-- Pokud to jde, jen audio procesu meeting appky (Core Audio process tap nebo SCK filtr na aplikaci), ne celý systém. Pozor na Brave: audio z jiných záložek.
+- Jen audio procesů meeting appky přes Core Audio process tap podle bundle ID (macOS 26+, `processRestoreEnabled`), ne celý systém. Brave: tap zachytí i jiné záložky, jednu záložku oddělit nejde.
 - Formát: mono AAC `.m4a`, ~32 kbps.
 
 **Obraz**
@@ -63,7 +64,7 @@ docs/       rozhodnutí a poznámky
 
 ## Roadmapa (vždy jen jeden krok, pak se zastav a dej uživateli otestovat)
 1. Kostra: XcodeGen projekt, menu bar, detekce meetingu, notifikace (bez nahrávání), config, Python skeleton.
-2. Nahrávání: audio meeting appky + klíčové snímky okna, `meta.json`, ukončení.
+2. Nahrávání: audio meeting appky + klíčové snímky okna, kalendář, `meta.json`, ukončení.
 3. Pipeline: přepis, diarizace, Claude čištění a shrnutí, zápis do Obsidianu, `status.json`.
 4. GUI: Přehled, Slovník, Nastavení, Úložiště, start po přihlášení.
 5. Ladění podle ostrého provozu.
@@ -72,7 +73,7 @@ docs/       rozhodnutí a poznámky
 - Xcode projekt se generuje z `app/project.yml` (XcodeGen). `.xcodeproj` needitovat ručně, je v `.gitignore`.
 - Build a spuštění přes XcodeBuildMCP, jinak `xcodebuild`.
 - Podpis certifikátem „MeetingAssistant Dev“ z Klíčenky (stabilní identita = oprávnění přežijí rebuild). Nikdy ad-hoc.
-- Bez App Sandboxu (subprocessy, zápis do vaultu). Bundle ID `dev.matej.MeetingAssistant`, minimum macOS 15.
+- Bez App Sandboxu (subprocessy, zápis do vaultu). Bundle ID `dev.matej.MeetingAssistant`, minimum macOS 26 (Core Audio tap podle bundle ID).
 - Logování přes `os.Logger(subsystem: "dev.matej.MeetingAssistant", category: …)`.
 - Python: `cd pipeline && uv run pytest && uv run ruff check`.
 

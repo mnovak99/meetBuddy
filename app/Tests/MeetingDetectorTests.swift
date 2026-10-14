@@ -204,4 +204,48 @@ struct MeetingDetectorTests {
         let end = feed(&detector, otherTab, at: [189])
         if case .probablyEnded(_, .primaryGone) = end.first {} else { Issue.record("got \(end)") }
     }
+
+    // MARK: Manual recording
+
+    @Test func manualRecordingStartsImmediately() {
+        var detector = MeetingDetector(settings: settings)
+        let window = Fixture.window(7, Fixture.brave, "YouTube")
+        let session = detector.startManual(source: .meet, window: window, now: at(0))
+        #expect(session?.isManual == true)
+        #expect(session?.acceptedAt == at(0))
+        #expect(session?.windowID == 7)
+        if case .recording = detector.state {} else { Issue.record("expected recording, got \(detector.state)") }
+        // Only one recording at a time.
+        #expect(detector.startManual(source: .teams, window: nil, now: at(1)) == nil)
+    }
+
+    @Test func manualBraveRecordingStandsOnAudio() throws {
+        var detector = MeetingDetector(settings: settings)
+        let started = detector.startManual(source: .meet, window: Fixture.window(7, Fixture.brave, "YouTube"), now: at(0))
+        let session = try #require(started)
+        // A video plays in Brave without a Meet window: no probable end.
+        let video = Fixture.meetSnapshot(meetWindow: false)
+        #expect(feed(&detector, video, at: [3, 60, 200, 400]).isEmpty)
+        // The video stops and the window closes: probable end after the grace period.
+        let stopped = SystemSnapshot(runningBundleIDs: [Fixture.brave], windows: [], audioProcesses: [])
+        _ = feed(&detector, stopped, at: [403])
+        let events = feed(&detector, stopped, at: [433])
+        guard case .probablyEnded(let ended, .signalsGone) = events.first else {
+            Issue.record("expected probable end, got \(events)")
+            return
+        }
+        #expect(ended.id == session.id)
+    }
+
+    @Test func windowCanBeChangedDuringRecording() throws {
+        var detector = MeetingDetector(settings: settings)
+        let session = try detectTeams(&detector)
+        _ = detector.accept(session.id, now: at(9))
+        let other = Fixture.window(5, Fixture.teams, "Chat | Microsoft Teams")
+        let changed = detector.setWindow(other, for: session.id)
+        #expect(changed)
+        #expect(detector.state.session?.windowID == 5)
+        let stale = detector.setWindow(other, for: UUID())
+        #expect(!stale)
+    }
 }

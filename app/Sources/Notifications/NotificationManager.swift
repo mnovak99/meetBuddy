@@ -8,7 +8,7 @@ import UserNotifications
 /// button, the system calls the delegate with the action's identifier.
 final class NotificationManager: NSObject {
     enum Choice: Sendable {
-        case record, dontRecord, stop, keepRecording
+        case record, dontRecord, stop, keepRecording, discardShortRecording, keepShortRecording
     }
 
     /// Called on the main thread when the user picks an action in one of our notifications.
@@ -24,6 +24,9 @@ final class NotificationManager: NSObject {
         static let dontRecord = "DONT_RECORD"
         static let stop = "STOP"
         static let keep = "KEEP"
+        static let shortCategory = "SHORT_RECORDING"
+        static let discard = "DISCARD"
+        static let keepShort = "KEEP_SHORT"
         static let sessionKey = "sessionID"
     }
 
@@ -50,7 +53,16 @@ final class NotificationManager: NSObject {
             intentIdentifiers: [],
             options: [.customDismissAction]
         )
-        center.setNotificationCategories([detected, ended])
+        let short = UNNotificationCategory(
+            identifier: ID.shortCategory,
+            actions: [
+                UNNotificationAction(identifier: ID.discard, title: "Zahodit", options: [.destructive]),
+                UNNotificationAction(identifier: ID.keepShort, title: "Ponechat"),
+            ],
+            intentIdentifiers: [],
+            options: [.customDismissAction]
+        )
+        center.setNotificationCategories([detected, ended, short])
     }
 
     /// Shows the system permission prompt on first launch; later it just returns the stored answer.
@@ -98,9 +110,30 @@ final class NotificationManager: NSObject {
         post(content, identifier: Self.endedIdentifier(session.id))
     }
 
+    /// A finished recording is shorter than `minDurationMinutes`: offer to discard it.
+    func postShortRecording(_ meta: RecordingMeta) {
+        let minutes = Int(((meta.durationSeconds ?? 0) / 60).rounded(.up))
+        let content = UNMutableNotificationContent()
+        content.title = "Záznam z \(meta.source.displayName) má jen \(minutes) min – zahodit?"
+        content.body = "Zahozený záznam se přesune do Koše. Bez odpovědi zůstane uložený."
+        content.sound = .default
+        content.categoryIdentifier = ID.shortCategory
+        content.userInfo = [ID.sessionKey: meta.id.uuidString]
+        post(content, identifier: "short-\(meta.id.uuidString)")
+    }
+
+    /// Plain information without buttons (window not capturable, silent audio, errors).
+    func postInfo(title: String, body: String, identifier: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        post(content, identifier: identifier)
+    }
+
     /// Removes notifications of a meeting that is over, so nobody answers a stale question.
     func removeNotifications(for sessionID: UUID) {
-        let ids = [Self.detectedIdentifier(sessionID), Self.endedIdentifier(sessionID)]
+        let ids = [Self.detectedIdentifier(sessionID), Self.endedIdentifier(sessionID), "short-\(sessionID.uuidString)"]
         center.removeDeliveredNotifications(withIdentifiers: ids)
         center.removePendingNotificationRequests(withIdentifiers: ids)
     }
@@ -131,6 +164,8 @@ final class NotificationManager: NSObject {
         case ID.dontRecord: choice = .dontRecord
         case ID.stop: choice = .stop
         case ID.keep: choice = .keepRecording
+        case ID.discard: choice = .discardShortRecording
+        case ID.keepShort: choice = .keepShortRecording
         case UNNotificationDismissActionIdentifier:
             Log.notifications.info("Notification dismissed without a choice")
             return

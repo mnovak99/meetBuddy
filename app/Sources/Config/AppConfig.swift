@@ -14,6 +14,8 @@ nonisolated struct AppConfig: Equatable, Sendable {
     var minDurationMinutes: Double = 5
     var frameIntervalSeconds: Double = 2.5
     var frameMaxDimension = 1600
+    /// Share of the perceptual hash that must change to save a new frame (0–1).
+    var frameChangeThreshold = 0.08
     var audioRetentionDays = 7
     var storageLimitGB: Double = 10
     var obsidianVaultPath = ""
@@ -24,6 +26,9 @@ nonisolated struct AppConfig: Equatable, Sendable {
         config.pollIntervalSeconds = pollIntervalSeconds.clamped(to: 1...60)
         config.detectionConfirmSeconds = detectionConfirmSeconds.clamped(to: 0...300)
         config.endSilenceMinutes = endSilenceMinutes.clamped(to: 0.5...60)
+        config.frameIntervalSeconds = frameIntervalSeconds.clamped(to: 0.5...30)
+        config.frameMaxDimension = min(max(frameMaxDimension, 320), 4096)
+        config.frameChangeThreshold = frameChangeThreshold.clamped(to: 0.01...1)
         return config
     }
 }
@@ -31,7 +36,7 @@ nonisolated struct AppConfig: Equatable, Sendable {
 nonisolated extension AppConfig: Codable {
     enum CodingKeys: String, CodingKey {
         case schemaVersion, userName, pollIntervalSeconds, detectionConfirmSeconds, endSilenceMinutes
-        case enabledSources, minDurationMinutes, frameIntervalSeconds, frameMaxDimension
+        case enabledSources, minDurationMinutes, frameIntervalSeconds, frameMaxDimension, frameChangeThreshold
         case audioRetentionDays, storageLimitGB, obsidianVaultPath
     }
 
@@ -58,6 +63,8 @@ nonisolated extension AppConfig: Codable {
             ?? frameIntervalSeconds
         frameMaxDimension = try c.decodeIfPresent(Int.self, forKey: .frameMaxDimension)
             ?? frameMaxDimension
+        frameChangeThreshold = try c.decodeIfPresent(Double.self, forKey: .frameChangeThreshold)
+            ?? frameChangeThreshold
         audioRetentionDays = try c.decodeIfPresent(Int.self, forKey: .audioRetentionDays)
             ?? audioRetentionDays
         storageLimitGB = try c.decodeIfPresent(Double.self, forKey: .storageLimitGB) ?? storageLimitGB

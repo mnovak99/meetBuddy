@@ -1,0 +1,36 @@
+{
+  "appBundleID": "com.microsoft.teams2",
+  "appVersion": "0.2.0",
+  "audio": {
+    "bitRate": 32000,
+    "channels": 1,
+    "codec": "aac",
+    "file": "audio.m4a",
+    "sampleRate": 48000,
+    "scope": "app",
+    "silenceSuspected": false,
+    "tappedBundleIDs": ["com.microsoft.teams2", "com.microsoft.teams2.helper", "com.microsoft.teams2.modulehost"]
+  },
+  "calendar": {
+    "attendees": [
+      { "email": "petr.novak@example.com", "name": "Petr Novák", "status": "accepted" },
+      { "email": "jana.k@example.com", "name": "Jana K.", "status": "tentative" }
+    ],
+    "end": "2026-10-14T15:00:00+02:00",
+    "organizer": "Petr Novák",
+    "start": "2026-10-14T14:00:00+02:00",
+    "title": "Sprint planning"
+  },
+  "durationSeconds": 3902,
+  "endReason": "user",
+  "endedAt": "2026-10-14T15:05:05+02:00",
+  "frames": [
+    { "capturedAt": "2026-10-14T14:12:10+02:00", "file": "frames/141210.jpg", "offsetSeconds": 727 }
+  ],
+  "id": "6F1C2D3E-4B5A-4C6D-8E7F-0123456789AB",
+  "manual": false,
+  "schemaVersion": 1,
+  "source": "teams",
+  "startedAt": "2026-10-14T14:00:03+02:00",
+  "window": { "id": 4242, "title": "Sprint planning | Microsoft Teams" }
+}
