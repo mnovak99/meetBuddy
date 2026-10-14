@@ -1,0 +1,38 @@
+# macOS
+.DS_Store
+
+# Xcode (project is generated from app/project.yml by XcodeGen)
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+DerivedData/
+build/
+app/Support/Info.plist
+buildServer.json
+.xcodebuildmcp/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+
+# Recordings, transcripts and notes must never be committed.
+# Only synthetic fixtures in pipeline/tests/fixtures/ are allowed.
+recordings/
+*.m4a
+*.wav
+*.aiff
+*.mp3
+*.jpg
+*.jpeg
+transcript*.json
+!pipeline/tests/fixtures/**
+
+# Local secrets and settings
+.env
+.env.*
+.claude/settings.local.json

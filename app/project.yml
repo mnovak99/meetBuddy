@@ -1,0 +1,88 @@
+# XcodeGen spec. Generate the Xcode project with `cd app && xcodegen generate`.
+# Never edit MeetingAssistant.xcodeproj by hand, it is regenerated from this file.
+name: MeetingAssistant
+
+options:
+  bundleIdPrefix: dev.matej
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    # Everything runs on the main thread unless marked otherwise (`nonisolated`).
+    # Simpler to read; the app does only light work every few seconds.
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
+    # Stable self-signed identity from the login keychain. Never ad-hoc ("-"):
+    # macOS ties granted permissions (TCC) to the signing identity.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "MeetingAssistant Dev"
+    DEVELOPMENT_TEAM: ""
+
+targets:
+  MeetingAssistant:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+    info:
+      path: Support/Info.plist
+      properties:
+        CFBundleName: MeetingAssistant
+        CFBundleDisplayName: Meeting Assistant
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        CFBundleDevelopmentRegion: cs
+        LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
+        LSApplicationCategoryType: public.app-category.productivity
+        # Menu bar only: no Dock icon, no main menu.
+        LSUIElement: true
+        # Ask macOS to show notifications as persistent alerts instead of banners.
+        # Not guaranteed for UserNotifications; the user can switch it in System Settings.
+        NSUserNotificationAlertStyle: alert
+        # Deliberately no NSMicrophoneUsageDescription: the app must never access the microphone.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.matej.MeetingAssistant
+        PRODUCT_NAME: MeetingAssistant
+        GENERATE_INFOPLIST_FILE: NO
+        # Personal app: no sandbox (runs subprocesses, writes into the Obsidian vault),
+        # no hardened runtime (not notarized, never distributed).
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: NO
+        COMBINE_HIDPI_IMAGES: YES
+
+  MeetingAssistantTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: MeetingAssistant
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.matej.MeetingAssistantTests
+        GENERATE_INFOPLIST_FILE: YES
+        # Tests run inside the app process, so they can use its internal types.
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MeetingAssistant.app/Contents/MacOS/MeetingAssistant"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
+schemes:
+  MeetingAssistant:
+    build:
+      targets:
+        MeetingAssistant: all
+        MeetingAssistantTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - MeetingAssistantTests
+    archive:
+      config: Release

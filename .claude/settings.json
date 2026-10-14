@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xcodegen:*)",
+      "Bash(xcodebuild:*)",
+      "Bash(xcrun:*)",
+      "Bash(swift:*)",
+      "Bash(uv:*)",
+      "Bash(log show:*)",
+      "Bash(log stream:*)",
+      "Bash(codesign -dv:*)",
+      "Bash(security find-identity:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf ~:*)",
+      "Bash(rm -rf /:*)",
+      "Read(./.env)"
+    ]
+  },
+  "enabledPlugins": {
+    "swift-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true
+  }
+}

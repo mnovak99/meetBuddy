@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "XcodeBuildMCP": {
+      "command": "npx",
+      "args": ["-y", "xcodebuildmcp@latest", "mcp"],
+      "env": {
+        "XCODEBUILDMCP_ENABLED_WORKFLOWS": "macos,project-discovery,logging,utilities"
+      }
+    },
+    "xcode": {
+      "command": "xcrun",
+      "args": ["mcpbridge"]
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    }
+  }
+}

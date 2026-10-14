@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "userName": "Matej",
+  "pollIntervalSeconds": 3,
+  "detectionConfirmSeconds": 9,
+  "endSilenceMinutes": 3,
+  "enabledSources": ["teams", "meet", "discord"],
+  "minDurationMinutes": 5,
+  "frameIntervalSeconds": 2.5,
+  "frameMaxDimension": 1600,
+  "audioRetentionDays": 7,
+  "storageLimitGB": 10,
+  "obsidianVaultPath": ""
+}

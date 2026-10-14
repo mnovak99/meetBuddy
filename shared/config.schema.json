@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dev.matej/MeetingAssistant/config.schema.json",
+  "title": "Meeting Assistant configuration",
+  "description": "~/Library/Application Support/MeetingAssistant/config.json. Read by the Swift app and the Python pipeline. Every key is optional; a missing key falls back to its default.",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "description": "Version of this schema. Bump on incompatible changes.",
+      "type": "integer",
+      "const": 1,
+      "default": 1
+    },
+    "userName": {
+      "description": "The user's name as colleagues say it. Used to find tasks assigned to him.",
+      "type": "string",
+      "default": "Matej"
+    },
+    "pollIntervalSeconds": {
+      "description": "How often the detector checks running apps, windows and audio.",
+      "type": "number",
+      "minimum": 1,
+      "maximum": 60,
+      "default": 3
+    },
+    "detectionConfirmSeconds": {
+      "description": "How long meeting signals must hold before the app asks whether to record (filters out short notification sounds).",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 300,
+      "default": 9
+    },
+    "endSilenceMinutes": {
+      "description": "Probable end of a meeting: the main signal (audio output for Teams and Discord, the Meet window for Google Meet) has been missing for this long.",
+      "type": "number",
+      "minimum": 0.5,
+      "maximum": 60,
+      "default": 3
+    },
+    "enabledSources": {
+      "description": "Meeting sources to detect.",
+      "type": "array",
+      "items": { "enum": ["teams", "meet", "discord"] },
+      "uniqueItems": true,
+      "default": ["teams", "meet", "discord"]
+    },
+    "minDurationMinutes": {
+      "description": "Recordings shorter than this are discarded.",
+      "type": "number",
+      "minimum": 0,
+      "default": 5
+    },
+    "frameIntervalSeconds": {
+      "description": "How often a frame of the meeting window is checked for a significant change.",
+      "type": "number",
+      "minimum": 0.5,
+      "maximum": 30,
+      "default": 2.5
+    },
+    "frameMaxDimension": {
+      "description": "Saved frames are scaled down so that the longer side is at most this many pixels.",
+      "type": "integer",
+      "minimum": 320,
+      "maximum": 4096,
+      "default": 1600
+    },
+    "audioRetentionDays": {
+      "description": "Audio files older than this are offered for deletion.",
+      "type": "integer",
+      "minimum": 1,
+      "default": 7
+    },
+    "storageLimitGB": {
+      "description": "Disk space limit for all recordings of the app.",
+      "type": "number",
+      "minimum": 1,
+      "default": 10
+    },
+    "obsidianVaultPath": {
+      "description": "Absolute path to the Obsidian vault. Empty = not configured yet.",
+      "type": "string",
+      "default": ""
+    }
+  },
+  "additionalProperties": true
+}
