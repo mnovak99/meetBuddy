@@ -1,6 +1,6 @@
 # Meeting Assistant
 
-Osobní macOS appka **Meeting Buddy** (nikdy se nepublikuje; `MeetingBuddy.app`, ikona: duch se sluchátky). Bundle ID, složka dat a logy zůstávají `dev.matej.MeetingAssistant` / `MeetingAssistant`. Běží v menu baru na Mac mini, detekuje online meetingy, po potvrzení nahraje zvuk meeting aplikace, mikrofon uživatele a klíčové snímky sdíleného obsahu a po meetingu vytvoří poznámku v Obsidianu (shrnutí + plný přepis).
+Osobní macOS appka **Meeting Buddy** (zdrojáky veřejně na GitHubu pod MIT, distribuce jen buildem ze zdrojáků; `MeetingBuddy.app`, ikona: duch se sluchátky). Bundle ID, složka dat a logy zůstávají `dev.matej.MeetingAssistant` / `MeetingAssistant`. Běží v menu baru na Mac mini, detekuje online meetingy, po potvrzení nahraje zvuk meeting aplikace, mikrofon uživatele a klíčové snímky sdíleného obsahu a po meetingu vytvoří poznámku v Obsidianu (shrnutí + plný přepis).
 
 ## Prostředí a uživatel
 - Mac mini M4 (2025), 16 GB RAM, macOS 26 Tahoe, disk 256 GB (volných ~84 GB).
@@ -38,7 +38,7 @@ docs/       rozhodnutí a poznámky
 - Ruční start nahrávání z menu (výslovná volba uživatele, např. když detekce selže).
 
 **Zvuk**
-- Dvě oddělené stopy sladěné v čase (jedno agregované zařízení): `audio.m4a` = zvuk meeting aplikace (ostatní účastníci), `mic.m4a` = mikrofon uživatele, pevně Arctis Nova 7 (`microphoneName` v configu). Bez povolení nebo bez připojeného mikrofonu se nahraje jen `audio.m4a`.
+- Dvě oddělené stopy sladěné v čase (jedno agregované zařízení): `audio.m4a` = zvuk meeting aplikace (ostatní účastníci), `mic.m4a` = mikrofon uživatele (`recordMicrophone`, `microphoneName`; prázdné = výchozí vstup systému, autor má Arctis Nova 7). Bez povolení nebo bez připojeného mikrofonu se nahraje jen `audio.m4a`.
 - Ztlumení si uživatel řeší tlačítkem na mikrofonu, appka stav ztlumení v meetingu neřeší.
 - Jen audio procesů meeting appky přes Core Audio process tap podle bundle ID (macOS 26+, `processRestoreEnabled`), ne celý systém. Brave: tap zachytí i jiné záložky, jednu záložku oddělit nejde.
 - Formát: mono AAC `.m4a`, ~32 kbps, obě stopy.
@@ -77,7 +77,8 @@ docs/       rozhodnutí a poznámky
 - Bez App Sandboxu (subprocessy, zápis do vaultu). Bundle ID `dev.matej.MeetingAssistant`, minimum macOS 26 (Core Audio tap podle bundle ID).
 - Logování přes `os.Logger(subsystem: "dev.matej.MeetingAssistant", category: …)`.
 - Python: `cd pipeline && uv run pytest && uv run ruff check`.
-- Popis pro lidi: `README.md` (česky). Změny průběžně do `CHANGELOG.md` pod `[Unreleased]`; vydání tlačítkem na GitHubu (Actions → Release, self-hosted runner `mac-mini` v `~/actions-runner`) nebo `scripts/release.sh --bump patch|minor|major`.
+- Popis pro lidi: `README.md` (česky). Změny průběžně do `CHANGELOG.md` pod `[Unreleased]`; vydání jen lokálně z Macu: `scripts/release.sh --bump patch|minor|major`.
+- Veřejné repo: žádné GitHub Actions ani self-hosted runner, žádná tajemství v repu ani v GitHub Secrets. Výchozí hodnoty configu neutrální (prázdné = dohledá se: jméno z účtu macOS, `uv`, pipeline z `MBPipelinePath` v Info.plist), osobní nastavení jen v `config.json`. Commity pod noreply e-mailem `62064325+mnovak99@users.noreply.github.com`.
 
 ## Pravidla práce
 - Na začátku kroku navrhni plán a počkej na schválení.

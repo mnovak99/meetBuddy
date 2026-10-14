@@ -8,8 +8,7 @@
 #
 # Release notes: the "## [Unreleased]" section of CHANGELOG.md, which becomes "## [0.5.0] – <date>".
 # If it is empty, the commit subjects since the last tag are used (and written to the changelog).
-# Also started from GitHub: Actions → Release → Run workflow (.github/workflows/release.yml), on the
-# self-hosted runner on this Mac.
+# Runs only locally: the repository is public, so there is no GitHub workflow or self-hosted runner.
 # Needs: a clean working tree on main, gh logged in (or GH_TOKEN), the "MeetingAssistant Dev" identity.
 set -euo pipefail
 

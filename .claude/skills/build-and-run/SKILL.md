@@ -47,5 +47,5 @@ After generating the project, run `xcode-build-server config -project app/Meetin
 ## Releases
 - Add changes under `## [Unreleased]` in CHANGELOG.md while working.
 - `scripts/release.sh X.Y.Z | --bump patch|minor|major [--draft]`: tests, version bump (app + pipeline + CHANGELOG; empty [Unreleased] → commit subjects), commit and tag, signed Release build, zip, `gh release create`. `--dry-run` builds the current version only.
-- GitHub button: `.github/workflows/release.yml` (workflow_dispatch) runs the script on the self-hosted runner `mac-mini` (`~/actions-runner`, LaunchAgent, labels self-hosted/macOS/meeting-buddy). The LaunchAgent plist must NOT contain `SessionCreate` (svc.sh adds it): in a separate security session codesign fails with errSecInternalComponent. Trigger from here: `gh workflow run release.yml -f bump=patch` (or `-f dry_run=true`).
+- Releases are made only locally on the Mac. The repository is public: no GitHub Actions workflows and no self-hosted runner (a fork PR could run code on the Mac), the signing key never goes to GitHub Secrets.
 - Commit messages and release notes never mention Claude.

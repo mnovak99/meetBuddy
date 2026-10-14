@@ -69,10 +69,10 @@ Obě části si předávají soubory v `~/Library/Application Support/MeetingAss
    brew install xcodegen uv ffmpeg gh
    sudo xcode-select -s /Applications/Xcode.app && sudo xcodebuild -license accept
    ```
-2. **Repo:** výchozí cesta k pipeline je `~/Work/meetHelper/pipeline`. Jinou cestu jde změnit v Nastavení.
+2. **Repo:** kamkoli. Appka si pipeline najde ve složce, ze které byla sestavená (jde to změnit v Nastavení → Pokročilé).
    ```sh
-   git clone git@github.com:mnovak99/meetBuddy.git ~/Work/meetHelper
-   cd ~/Work/meetHelper
+   git clone https://github.com/mnovak99/meetBuddy.git
+   cd meetBuddy
    ```
 3. **Podpisový certifikát:** jednou na každém Macu. Stálý podpis zajistí, že macOS po každém buildu nezapomene udělená oprávnění. Skript se jednou zeptá na heslo k Macu.
    ```sh
@@ -100,11 +100,14 @@ Obě části si předávají soubory v `~/Library/Application Support/MeetingAss
    | Mikrofon | povolit |
    | Systémový zvuk | ptá se při prvním nahrávání |
    | složka Dokumenty | může se zeptat při prvním zápisu poznámky, pokud je tam vault |
-8. **Nastavení:** v menu → **Otevřít Meeting Buddy…** → Nastavení vyber vault, mikrofon a své jméno a zapni **Spouštět po přihlášení**.
+8. **Nastavení:** v menu → **Otevřít Meeting Buddy…** → Nastavení vyber Obsidian vault (bez něj poznámky nevzniknou) a zapni **Spouštět po přihlášení**. Ostatní má rozumné výchozí hodnoty:
+   - jméno = křestní jméno z účtu na Macu (podle něj Claude pozná tvoje úkoly),
+   - mikrofon = výchozí vstup systému, nahrávání mikrofonu jde vypnout,
+   - `uv` a pipeline se najdou samy.
 
 ### Instalace z release
 
-Na [Releases](https://github.com/mnovak99/meetBuddy/releases) stáhni `MeetingBuddy-X.Y.Z.zip`, rozbal ho a přesuň `MeetingBuddy.app` do `/Applications`. Pipeline se i tak bere z naklonovaného repa, takže kroky 1–5 výše platí dál. Build je podepsaný lokální identitou „MeetingAssistant Dev“: na jiném Macu si vytvoř vlastní identitu a sestav appku ze zdrojáků.
+Na [Releases](https://github.com/mnovak99/meetBuddy/releases) je `MeetingBuddy-X.Y.Z.zip`, ale je podepsaný jen lokální identitou autora (bez notarizace Apple), takže na jiném Macu ho Gatekeeper nepustí a oprávnění by se po aktualizaci ztrácela. **Na svém Macu si appku sestav ze zdrojáků podle kroků výše.** Release slouží hlavně jako přehled verzí.
 
 ## Používání
 
@@ -162,44 +165,21 @@ docs/       decisions.md (technická rozhodnutí a zjištění), původní SETUP
 
 ## Vydání (Releases)
 
-Verze se řídí [SemVer](https://semver.org/lang/cs/) a změny se zapisují do [`CHANGELOG.md`](CHANGELOG.md):
+Vydává se jen z Macu autora, GitHub Actions se nepoužívají (podpisový klíč nikdy neopustí Mac a v repu nejsou žádná tajemství). Verze se řídí [SemVer](https://semver.org/lang/cs/) a změny se zapisují do [`CHANGELOG.md`](CHANGELOG.md):
 
 1. Během práce doplňuj změny pod `## [Unreleased]`. Když tam nic není, poznámky se sestaví z commitů od posledního vydání.
-2. Vydání spustíš **tlačítkem na GitHubu**: [Actions → Release → Run workflow](https://github.com/mnovak99/meetBuddy/actions/workflows/release.yml).
-   - Vyber **patch** (0.4.0 → 0.4.1), **minor** (→ 0.5.0) nebo **major** (→ 1.0.0).
-   - Volitelně zaškrtni „Jen koncept“ nebo „Jen zkouška“.
-   - Vydá se to, co je na GitHubu v `main`. Po vydání si lokálně udělej `git pull`.
-3. Nebo z Terminálu:
+2. Vydání:
    ```sh
-   scripts/release.sh --bump minor   # nebo konkrétní verze: scripts/release.sh 0.5.0, případně s --draft
+   scripts/release.sh --bump patch   # 0.4.0 → 0.4.1; minor → 0.5.0, major → 1.0.0, nebo konkrétní verze 0.5.0
+   scripts/release.sh --bump minor --draft   # jen koncept, zveřejníš ručně na stránce Releases
    ```
-4. Skript:
+3. Skript:
    1. spustí testy,
    2. nastaví verzi v appce i pipeline a přejmenuje sekci v CHANGELOGu,
    3. vytvoří commit „Release 0.5.0“ a tag `v0.5.0`,
    4. sestaví podepsaný Release a zabalí ho do `MeetingBuddy-0.5.0.zip`,
    5. pushne a založí GitHub release s poznámkami z CHANGELOGu.
-5. `scripts/release.sh --dry-run` jen otestuje a sestaví aktuální verzi, bez gitu a bez GitHubu.
-
-### Runner na Macu mini
-
-Tlačítko spouští build na tvém Macu, ne na serveru GitHubu. Appku tak podepisuje lokální identita, jejíž klíč Mac nikdy neopustí, a nic to nestojí.
-
-- Runner je v `~/actions-runner` jako služba (LaunchAgent), která běží, když jsi přihlášený.
-- Když je Mac vypnutý, úloha počká ve frontě.
-- Stav: `~/actions-runner/svc.sh status`; na GitHubu Settings → Actions → Runners (`mac-mini`).
-- Odinstalace:
-  ```sh
-  cd ~/actions-runner && ./svc.sh stop && ./svc.sh uninstall
-  ./config.sh remove --token "$(gh api -X POST repos/mnovak99/meetBuddy/actions/runners/remove-token --jq .token)"
-  ```
-- Instalace na jiném Macu: GitHub → Settings → Actions → Runners → *New self-hosted runner* (macOS, ARM64). Při `./config.sh` přidej `--labels meeting-buddy`, pak:
-  ```sh
-  ./svc.sh install
-  # Bez vlastního bezpečnostního sezení, jinak codesign nemá přístup ke Klíčence (errSecInternalComponent):
-  plutil -remove SessionCreate ~/Library/LaunchAgents/actions.runner.*.plist
-  ./svc.sh start
-  ```
+4. `scripts/release.sh --dry-run` jen otestuje a sestaví aktuální verzi, bez gitu a bez GitHubu.
 
 ## Řešení problémů
 
@@ -215,3 +195,9 @@ Tlačítko spouští build na tvém Macu, ne na serveru GitHubu. Appku tak podep
 ## Stav
 
 Hotové kroky 1–4: detekce, nahrávání, pipeline a GUI. Další je ladění podle ostrého provozu. Podrobnosti jsou v [`CHANGELOG.md`](CHANGELOG.md) a [`docs/decisions.md`](docs/decisions.md).
+
+Je to osobní projekt: issues a pull requesty můžou zůstat bez odpovědi.
+
+## Licence
+
+[MIT](LICENSE) © 2026 Matěj Novák

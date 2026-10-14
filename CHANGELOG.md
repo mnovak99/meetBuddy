@@ -5,6 +5,18 @@ Sekci `[Unreleased]` doplňuj průběžně; `scripts/release.sh` z ní při vyd�
 
 ## [Unreleased]
 
+### Přidáno
+- Licence MIT, zdrojáky jsou veřejné.
+- Volba „Nahrávat můj mikrofon“ (jde vypnout).
+- Varování v menu, když není vybraný Obsidian vault.
+
+### Změněno
+- Výchozí nastavení bez osobních hodnot: jméno z účtu na Macu, mikrofon = výchozí vstup systému, `uv` a pipeline se najdou samy (pipeline ve složce, ze které byla appka sestavená). Stávající `config.json` zůstává beze změny.
+- Vydání jen z Terminálu (`scripts/release.sh`).
+
+### Odstraněno
+- Tlačítko pro vydání na GitHubu a self-hosted runner: u veřejného repa by cizí kód mohl běžet na Macu.
+
 ## [0.4.1] – 2026-10-14
 
 ### Přidáno

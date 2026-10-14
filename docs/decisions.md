@@ -172,3 +172,18 @@ Technical findings that are not obvious from the code. Product decisions live in
 - Start at login: `SMAppService.mainApp` with the "requires approval" state handled.
 - The HF token can be replaced from Nastavení (stored with the `security` tool, like the pipeline
   reads it).
+
+## Public repository (2026-10-14)
+
+- Sources are public under MIT; the app is shared only as a build from source (the release zips are
+  signed with the author's self-signed identity and not notarized).
+- No GitHub Actions and no self-hosted runner: on a public repository a fork pull request could
+  run code on the Mac. Releases are made locally with `scripts/release.sh`; the signing key never
+  goes to GitHub Secrets.
+- Neutral defaults instead of the author's values; empty fields are resolved at runtime:
+  - `userName` → first word of the macOS account's full name (`NSFullUserName`, `id -F` in Python),
+  - `microphoneName` → the system default input; `recordMicrophone` turns the track off,
+  - `uvPath` → `~/.local/bin`, `~/.cargo/bin`, `/opt/homebrew/bin`, `/usr/local/bin`,
+  - `pipelinePath` → `MBPipelinePath` in Info.plist = `$(SRCROOT)/../pipeline` of the build.
+  An existing `config.json` keeps its explicit values.
+- History rewritten to the GitHub noreply e-mail before publishing.
