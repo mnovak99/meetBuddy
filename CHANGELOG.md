@@ -5,6 +5,13 @@ Sekci `[Unreleased]` doplňuj průběžně; `scripts/release.sh` z ní při vyd�
 
 ## [Unreleased]
 
+### Přidáno
+- Vydání tlačítkem na GitHubu (Actions → Release → Run workflow) přes runner na Macu mini; volba patch / minor / major, koncept nebo zkouška.
+- Poznámky k vydání z commitů, když v CHANGELOGu nic není.
+
+### Opraveno
+- Testy nahrávání zvuku už při běhu nepípají.
+
 ## [0.4.0] – 2026-10-14
 
 ### Přidáno

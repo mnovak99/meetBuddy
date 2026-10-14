@@ -77,7 +77,7 @@ docs/       rozhodnutí a poznámky
 - Bez App Sandboxu (subprocessy, zápis do vaultu). Bundle ID `dev.matej.MeetingAssistant`, minimum macOS 26 (Core Audio tap podle bundle ID).
 - Logování přes `os.Logger(subsystem: "dev.matej.MeetingAssistant", category: …)`.
 - Python: `cd pipeline && uv run pytest && uv run ruff check`.
-- Popis pro lidi: `README.md` (česky). Změny průběžně do `CHANGELOG.md` pod `[Unreleased]`; vydání `scripts/release.sh X.Y.Z` (GitHub Releases přes `gh`).
+- Popis pro lidi: `README.md` (česky). Změny průběžně do `CHANGELOG.md` pod `[Unreleased]`; vydání tlačítkem na GitHubu (Actions → Release, self-hosted runner `mac-mini` v `~/actions-runner`) nebo `scripts/release.sh --bump patch|minor|major`.
 
 ## Pravidla práce
 - Na začátku kroku navrhni plán a počkej na schválení.

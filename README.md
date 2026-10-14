@@ -164,18 +164,36 @@ docs/       decisions.md (technická rozhodnutí a zjištění), původní SETUP
 
 Verze se řídí [SemVer](https://semver.org/lang/cs/) a změny se zapisují do [`CHANGELOG.md`](CHANGELOG.md):
 
-1. Během práce doplňuj změny pod `## [Unreleased]`.
-2. Vydání spustíš takhle:
+1. Během práce doplňuj změny pod `## [Unreleased]`. Když tam nic není, poznámky se sestaví z commitů od posledního vydání.
+2. Vydání spustíš **tlačítkem na GitHubu**: [Actions → Release → Run workflow](https://github.com/mnovak99/meetBuddy/actions/workflows/release.yml).
+   - Vyber **patch** (0.4.0 → 0.4.1), **minor** (→ 0.5.0) nebo **major** (→ 1.0.0).
+   - Volitelně zaškrtni „Jen koncept“ nebo „Jen zkouška“.
+   - Vydá se to, co je na GitHubu v `main`. Po vydání si lokálně udělej `git pull`.
+3. Nebo z Terminálu:
    ```sh
-   scripts/release.sh 0.5.0          # nebo s --draft pro koncept
+   scripts/release.sh --bump minor   # nebo konkrétní verze: scripts/release.sh 0.5.0, případně s --draft
    ```
-3. Skript:
+4. Skript:
    1. spustí testy,
    2. nastaví verzi v appce i pipeline a přejmenuje sekci v CHANGELOGu,
    3. vytvoří commit „Release 0.5.0“ a tag `v0.5.0`,
    4. sestaví podepsaný Release a zabalí ho do `MeetingBuddy-0.5.0.zip`,
    5. pushne a založí GitHub release s poznámkami z CHANGELOGu.
-4. `scripts/release.sh --dry-run` jen otestuje a sestaví aktuální verzi, bez gitu a bez GitHubu.
+5. `scripts/release.sh --dry-run` jen otestuje a sestaví aktuální verzi, bez gitu a bez GitHubu.
+
+### Runner na Macu mini
+
+Tlačítko spouští build na tvém Macu, ne na serveru GitHubu. Appku tak podepisuje lokální identita, jejíž klíč Mac nikdy neopustí, a nic to nestojí.
+
+- Runner je v `~/actions-runner` jako služba (LaunchAgent), která běží, když jsi přihlášený.
+- Když je Mac vypnutý, úloha počká ve frontě.
+- Stav: `~/actions-runner/svc.sh status`; na GitHubu Settings → Actions → Runners (`mac-mini`).
+- Odinstalace:
+  ```sh
+  cd ~/actions-runner && ./svc.sh stop && ./svc.sh uninstall
+  ./config.sh remove --token "$(gh api -X POST repos/mnovak99/meetBuddy/actions/runners/remove-token --jq .token)"
+  ```
+- Instalace na jiném Macu: GitHub → Settings → Actions → Runners → *New self-hosted runner* (macOS, ARM64). Při `./config.sh` přidej `--labels meeting-buddy`, pak `./svc.sh install && ./svc.sh start`.
 
 ## Řešení problémů
 
