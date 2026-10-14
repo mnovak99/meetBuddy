@@ -16,7 +16,7 @@ from meeting_pipeline.claude import ClaudeRunner
 from meeting_pipeline.config import Config
 from meeting_pipeline.recording import Recording
 from meeting_pipeline.transcript import USER_SPEAKER, Segment
-from meeting_pipeline.vocabulary import Term
+from meeting_pipeline.vocabulary import CATEGORIES, Term, apply_spelling, merge_suggestions
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ class Line:
 CLEAN_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["speakers", "corrections", "drop_ids"],
+    "required": ["speakers", "corrections", "drop_ids", "vocabulary_suggestions"],
     "properties": {
         "speakers": {
             "type": "array",
@@ -65,6 +65,20 @@ CLEAN_SCHEMA: dict[str, Any] = {
             },
         },
         "drop_ids": {"type": "array", "items": {"type": "integer"}},
+        "vocabulary_suggestions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["term", "heard_as", "category", "description"],
+                "properties": {
+                    "term": {"type": "string"},
+                    "heard_as": {"type": "array", "items": {"type": "string"}},
+                    "category": {"enum": list(CATEGORIES)},
+                    "description": {"type": "string"},
+                },
+            },
+        },
     },
 }
 
@@ -139,15 +153,18 @@ def clock(recording: Recording, seconds: float) -> str:
     return (started_at(recording) + timedelta(seconds=seconds)).strftime("%H:%M:%S")
 
 
-def plain_lines(segments: list[Segment], recording: Recording, config: Config) -> list[Line]:
-    """Lines without Claude: diarization labels, the user's name for the microphone."""
+def plain_lines(
+    segments: list[Segment], recording: Recording, config: Config, terms: list[Term]
+) -> list[Line]:
+    """Lines without Claude: diarization labels, the user's name for the microphone and the
+    vocabulary's automatic spelling corrections."""
     return [
         Line(
             id=index,
             time=clock(recording, segment.start),
             speaker=config.user_name if segment.speaker == USER_SPEAKER else segment.speaker,
             language=segment.language,
-            text=segment.text,
+            text=apply_spelling(segment.text, terms),
         )
         for index, segment in enumerate(segments)
     ]
@@ -173,11 +190,11 @@ def vocabulary_text(terms: list[Term]) -> str:
         return "(prázdný)"
     lines = []
     for term in terms:
-        line = f"- {term.term}"
-        if term.aliases:
-            line += f" (aliasy: {', '.join(term.aliases)})"
+        line = f"- {term.term} [{term.category}]"
         if term.description:
-            line += f" – {term.description}"
+            line += f": {term.description}"
+        if term.aliases:
+            line += f" (Whisper píše: {', '.join(term.aliases)})"
         lines.append(line)
     return "\n".join(lines)
 
@@ -188,15 +205,20 @@ def clean(
     config: Config,
     terms: list[Term],
     runner: ClaudeRunner,
+    suggestions_path: Path | None = None,
 ) -> list[Line]:
-    """Speaker names, corrected terms and dropped hallucinations. Cached in cleaned.json."""
+    """Speaker names, corrected terms and dropped hallucinations. Cached in cleaned.json.
+
+    Claude's vocabulary suggestions go to `suggestions_path` (the review queue in the app).
+    """
     cache = recording.folder / CLEANED_FILE
     if cache.is_file():
         return [Line(**item) for item in json.loads(cache.read_text(encoding="utf-8"))["lines"]]
 
+    spelled = plain_lines(segments, recording, config, terms)
     transcript = "\n".join(
-        f"#{index} [{clock(recording, s.start)}] {s.speaker} ({s.language}): {s.text}"
-        for index, s in enumerate(segments)
+        f"#{line.id} [{line.time}] {s.speaker} ({s.language}): {line.text}"
+        for line, s in zip(spelled, segments, strict=True)
     )
     prompt = Template((PROMPTS_DIR / "clean.md").read_text(encoding="utf-8")).substitute(
         user_name=config.user_name,
@@ -221,9 +243,14 @@ def clean(
             language=line.language,
             text=corrections.get(line.id, line.text),
         )
-        for line in plain_lines(segments, recording, config)
+        for line in spelled
         if line.id not in dropped
     ]
+    if suggestions_path is not None:
+        added = merge_suggestions(
+            suggestions_path, result["vocabulary_suggestions"], terms, recording.folder.name
+        )
+        log.info("Vocabulary suggestions: %d new", added)
     log.info("Cleaned transcript: %d speakers named, %d corrections, %d dropped",
              len(names), len(corrections), len(dropped))  # fmt: skip
     cache.write_text(

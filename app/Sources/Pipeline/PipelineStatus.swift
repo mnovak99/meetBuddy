@@ -78,7 +78,8 @@ nonisolated enum PipelineCommand {
 
     /// `taskpolicy -b` runs the pipeline as a background task: macOS gives it CPU and disk only
     /// when nothing more important (VS Code, Docker, the meeting itself) needs them.
-    static func make(folder: URL, config: AppConfig, environment: [String: String]) -> Invocation {
+    /// `force`: start over, forgetting transcript, names and summary (e.g. after vocabulary changes).
+    static func make(folder: URL, config: AppConfig, environment: [String: String], force: Bool = false) -> Invocation {
         let uv = (config.uvPath as NSString).expandingTildeInPath
         let project = (config.pipelinePath as NSString).expandingTildeInPath
         let home = environment["HOME"] ?? NSHomeDirectory()
@@ -95,7 +96,8 @@ nonisolated enum PipelineCommand {
 
         return Invocation(
             executable: URL(filePath: "/usr/sbin/taskpolicy"),
-            arguments: ["-b", uv, "run", "--project", project, "meeting-pipeline", folder.path(percentEncoded: false)],
+            arguments: ["-b", uv, "run", "--project", project, "meeting-pipeline"]
+                + (force ? ["--force"] : []) + [folder.path(percentEncoded: false)],
             environment: env
         )
     }

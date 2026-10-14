@@ -108,6 +108,14 @@ def fake_claude(prompt: str, schema: dict, *, cwd: Path, allowed_tools=()) -> di
             ],
             "corrections": [{"id": 0, "text": "Opravený text"}],
             "drop_ids": [],
+            "vocabulary_suggestions": [
+                {
+                    "term": "Grafana",
+                    "heard_as": ["grafána"],
+                    "category": "product",
+                    "description": "Dashboardy",
+                }
+            ],
         }
     meta = json.loads((cwd / "meta.json").read_text(encoding="utf-8"))
     frames = meta.get("frames") or []

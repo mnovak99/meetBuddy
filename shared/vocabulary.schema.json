@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dev.matej/MeetingAssistant/vocabulary.schema.json",
+  "title": "Meeting Buddy vocabulary",
+  "description": "~/Library/Application Support/MeetingAssistant/vocabulary.json, edited in the app (Slovník). Inspired by custom vocabulary (keyterms) and custom spelling of speech-to-text services.",
+  "type": "object",
+  "required": ["schemaVersion", "terms"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "terms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["term"],
+        "properties": {
+          "term": { "description": "Correct written form.", "type": "string", "minLength": 1 },
+          "category": { "enum": ["abbreviation", "person", "product", "company", "term"], "default": "term" },
+          "aliases": {
+            "description": "How speech recognition writes it wrongly (custom spelling 'from').",
+            "type": "array",
+            "items": { "type": "string" },
+            "default": []
+          },
+          "description": {
+            "description": "Meaning of an abbreviation, role of a person … Context for the Claude cleanup only.",
+            "type": "string",
+            "default": ""
+          },
+          "inPrompt": {
+            "description": "Put into Whisper's prompt (keyterm boosting). Only rare words; the prompt holds ~200 tokens.",
+            "type": "boolean",
+            "default": false
+          },
+          "autoReplace": {
+            "description": "Replace the aliases with the correct form right after transcription (whole words, case-insensitive). Off for aliases that are also common words.",
+            "type": "boolean",
+            "default": false
+          }
+        }
+      }
+    }
+  }
+}

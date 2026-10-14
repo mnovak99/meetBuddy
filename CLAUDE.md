@@ -1,6 +1,6 @@
 # Meeting Assistant
 
-Osobní macOS appka (nikdy se nepublikuje). Běží v menu baru na Mac mini, detekuje online meetingy, po potvrzení nahraje zvuk meeting aplikace, mikrofon uživatele a klíčové snímky sdíleného obsahu a po meetingu vytvoří poznámku v Obsidianu (shrnutí + plný přepis).
+Osobní macOS appka **Meeting Buddy** (nikdy se nepublikuje; `MeetingBuddy.app`, ikona: duch se sluchátky). Bundle ID, složka dat a logy zůstávají `dev.matej.MeetingAssistant` / `MeetingAssistant`. Běží v menu baru na Mac mini, detekuje online meetingy, po potvrzení nahraje zvuk meeting aplikace, mikrofon uživatele a klíčové snímky sdíleného obsahu a po meetingu vytvoří poznámku v Obsidianu (shrnutí + plný přepis).
 
 ## Prostředí a uživatel
 - Mac mini M4 (2025), 16 GB RAM, macOS 26 Tahoe, disk 256 GB (volných ~84 GB).
@@ -61,7 +61,7 @@ docs/       rozhodnutí a poznámky
 
 **Úložiště**: audio 7 dní, nevybrané snímky smazat hned po zpracování, limit appky 10 GB, mazání vždy s potvrzením, staré poznámky do archivní složky (ručně z GUI).
 
-**GUI** (SwiftUI okno): Přehled, Slovník, Nastavení, Úložiště. Ovládání ikonou v menu baru a notifikacemi. Start po přihlášení přes `SMAppService.mainApp`. Mac se po práci vypíná.
+**GUI** (SwiftUI okno): Slovník, Přehled, Nastavení, Úložiště. Slovník podle konvence custom vocabulary: správný tvar, typ, chybné tvary (custom spelling), význam (jen pro Claude), „Do promptu“ (keyterms do Whisperu, ~200 tokenů), „Automaticky opravovat“; návrhy z Claudova čištění, import/export CSV. Ovládání ikonou v menu baru a notifikacemi. Start po přihlášení přes `SMAppService.mainApp`. Mac se po práci vypíná.
 
 ## Roadmapa (vždy jen jeden krok, pak se zastav a dej uživateli otestovat)
 1. Kostra: XcodeGen projekt, menu bar, detekce meetingu, notifikace (bez nahrávání), config, Python skeleton.

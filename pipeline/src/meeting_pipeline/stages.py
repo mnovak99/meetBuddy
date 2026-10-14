@@ -26,7 +26,13 @@ from meeting_pipeline.transcript import (
     load_transcript,
     save_transcript,
 )
-from meeting_pipeline.vocabulary import Term, initial_prompt, load_vocabulary
+from meeting_pipeline.vocabulary import (
+    SUGGESTIONS_FILE,
+    Term,
+    initial_prompt,
+    load_vocabulary,
+    whisper_token_counter,
+)
 
 log = logging.getLogger(__name__)
 
@@ -41,6 +47,9 @@ class Components:
     transcribe: Transcriber
     vocabulary: list[Term] = field(default_factory=list)
     claude: ClaudeRunner = run_claude
+    # Where Claude's vocabulary suggestions go (None in tests: not written).
+    suggestions_path: Path | None = None
+    count_tokens: Callable[[str], int] | None = None
 
 
 def default_components() -> Components:
@@ -49,7 +58,18 @@ def default_components() -> Components:
         diarize=lambda samples: models.diarize(samples, token),
         transcribe=models.transcribe,
         vocabulary=load_vocabulary(),
+        suggestions_path=SUGGESTIONS_FILE,
+        count_tokens=whisper_token_counter(),
     )
+
+
+CACHE_FILES = (DIARIZATION_FILE, TRANSCRIPT_FILE, "transcript.txt", "cleaned.json", "summary.json")
+
+
+def clear_caches(folder: Path) -> None:
+    """For a fresh run ("Přepsat znovu od začátku"): forget all intermediate results."""
+    for name in CACHE_FILES:
+        (folder / name).unlink(missing_ok=True)
 
 
 def run_transcription(
@@ -89,7 +109,10 @@ def run_transcription(
     def progress(done: int, total: int) -> None:
         report(f"Přepisuji {done}/{total}")
 
-    prompt = initial_prompt(components.vocabulary)
+    if components.count_tokens:
+        prompt = initial_prompt(components.vocabulary, count_tokens=components.count_tokens)
+    else:
+        prompt = initial_prompt(components.vocabulary)
     segments = build_transcript(app, mic, turns, components.transcribe, prompt, progress)
     save_transcript(
         folder,
@@ -122,13 +145,16 @@ def run_note(
     claude_error: str | None = None
     try:
         report("Čistím přepis a přiřazuji jména")
-        lines = clean(segments, recording, config, components.vocabulary, components.claude)
+        lines = clean(
+            segments, recording, config, components.vocabulary, components.claude,
+            components.suggestions_path,
+        )  # fmt: skip
         report("Píšu shrnutí")
         summary = summarize(lines, recording, config, components.claude)
     except ClaudeError as exc:
         log.warning("Claude not available: %s", exc)
         claude_error = str(exc)
-        lines, summary = plain_lines(segments, recording, config), None
+        lines, summary = plain_lines(segments, recording, config, components.vocabulary), None
     report("Zapisuji poznámku do Obsidianu")
     return write_note(recording, lines, summary, config), claude_error
 

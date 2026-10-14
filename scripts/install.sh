@@ -4,7 +4,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP_NAME="MeetingAssistant"
+APP_NAME="MeetingBuddy"
+# Before the rename the app was MeetingAssistant.app.
+OLD_APP="/Applications/MeetingAssistant.app"
 BUILT_APP="$ROOT/build/Build/Products/Debug/$APP_NAME.app"
 INSTALLED_APP="/Applications/$APP_NAME.app"
 
@@ -13,8 +15,8 @@ echo "==> Generating Xcode project"
 
 echo "==> Building"
 xcodebuild \
-  -project "$ROOT/app/$APP_NAME.xcodeproj" \
-  -scheme "$APP_NAME" \
+  -project "$ROOT/app/MeetingAssistant.xcodeproj" \
+  -scheme MeetingAssistant \
   -configuration Debug \
   -destination "platform=macOS,arch=arm64" \
   -derivedDataPath "$ROOT/build" \
@@ -23,6 +25,8 @@ xcodebuild \
 
 echo "==> Installing to $INSTALLED_APP"
 pkill -x "$APP_NAME" || true
+pkill -x MeetingAssistant || true
+if [ -d "$OLD_APP" ]; then rm -rf "$OLD_APP"; fi
 rm -rf "$INSTALLED_APP"
 ditto "$BUILT_APP" "$INSTALLED_APP"
 

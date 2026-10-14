@@ -19,6 +19,8 @@ final class PipelineRunner {
 
     @ObservationIgnored private var config: AppConfig
     @ObservationIgnored private var process: Process?
+    /// Queued recordings to process from scratch ("Přepsat znovu od začátku").
+    @ObservationIgnored private var startOver: Set<URL> = []
 
     static let logFileName = "pipeline.log"
 
@@ -31,8 +33,11 @@ final class PipelineRunner {
     }
 
     /// Adds a finished recording. `start: false` only marks it queued (the app is quitting);
-    /// it is picked up on the next launch.
-    func enqueue(_ folder: URL, start: Bool = true) {
+    /// it is picked up on the next launch. `force`: process it from scratch.
+    func enqueue(_ folder: URL, start: Bool = true, force: Bool = false) {
+        if force {
+            startOver.insert(folder)
+        }
         do {
             try PipelineStatus.writeQueued(to: folder)
         } catch {
@@ -75,7 +80,8 @@ final class PipelineRunner {
         guard process == nil, !queue.isEmpty else { return }
         let folder = queue.removeFirst()
         let invocation = PipelineCommand.make(
-            folder: folder, config: config, environment: ProcessInfo.processInfo.environment)
+            folder: folder, config: config, environment: ProcessInfo.processInfo.environment,
+            force: startOver.remove(folder) != nil)
 
         let process = Process()
         process.executableURL = invocation.executable

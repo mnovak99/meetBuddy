@@ -15,6 +15,13 @@ struct MeetingAssistantApp: App {
             MenuBarIcon(model: appDelegate.model)
         }
         .menuBarExtraStyle(.menu)
+
+        // The app window (Slovník, Přehled, Nastavení, Úložiště); opened from the menu only.
+        Window("Meeting Buddy", id: MainWindow.id) {
+            MainWindow(model: appDelegate.model)
+        }
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
     }
 }
 

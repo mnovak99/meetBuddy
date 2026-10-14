@@ -30,12 +30,13 @@ targets:
     platform: macOS
     sources:
       - path: Sources
+      - path: Resources
     info:
       path: Support/Info.plist
       properties:
-        CFBundleName: MeetingAssistant
-        CFBundleDisplayName: Meeting Assistant
-        CFBundleShortVersionString: "0.3.0"
+        CFBundleName: Meeting Buddy
+        CFBundleDisplayName: Meeting Buddy
+        CFBundleShortVersionString: "0.4.0"
         CFBundleVersion: "1"
         CFBundleDevelopmentRegion: cs
         LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
@@ -46,15 +47,19 @@ targets:
         # Not guaranteed for UserNotifications; the user can switch it in System Settings.
         NSUserNotificationAlertStyle: alert
         # Core Audio process tap: system prompt "Nahrávání systémového zvuku" on the first recording.
-        NSAudioCaptureUsageDescription: "Meeting Assistant nahrává zvuk meeting aplikace (Teams, Google Meet, Discord) kvůli přepisu."
+        NSAudioCaptureUsageDescription: "Meeting Buddy nahrává zvuk meeting aplikace (Teams, Google Meet, Discord) kvůli přepisu."
         # EventKit: title and participants of the current meeting.
-        NSCalendarsFullAccessUsageDescription: "Meeting Assistant čte z Kalendáře název a účastníky právě probíhajícího meetingu."
+        NSCalendarsFullAccessUsageDescription: "Meeting Buddy čte z Kalendáře název a účastníky právě probíhajícího meetingu."
         # The user's voice is recorded into mic.m4a (fixed device, microphoneName in config.json).
-        NSMicrophoneUsageDescription: "Meeting Assistant nahrává tvůj hlas z mikrofonu (Arctis) do samostatné stopy, aby přepis věděl, co jsi řekl ty."
+        NSMicrophoneUsageDescription: "Meeting Buddy nahrává tvůj hlas z mikrofonu (Arctis) do samostatné stopy, aby přepis věděl, co jsi řekl ty."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.matej.MeetingAssistant
-        PRODUCT_NAME: MeetingAssistant
+        # The app is called Meeting Buddy; bundle ID, data folder and logs keep the original name,
+        # so permissions and recordings carry over. The Swift module keeps its name for the tests.
+        PRODUCT_NAME: MeetingBuddy
+        PRODUCT_MODULE_NAME: MeetingAssistant
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO
         # Personal app: no sandbox (runs subprocesses, writes into the Obsidian vault),
         # no hardened runtime (not notarized, never distributed).
@@ -74,7 +79,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: dev.matej.MeetingAssistantTests
         GENERATE_INFOPLIST_FILE: YES
         # Tests run inside the app process, so they can use its internal types.
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MeetingAssistant.app/Contents/MacOS/MeetingAssistant"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MeetingBuddy.app/Contents/MacOS/MeetingBuddy"
         BUNDLE_LOADER: "$(TEST_HOST)"
 
 schemes:

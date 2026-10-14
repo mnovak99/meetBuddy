@@ -9,7 +9,7 @@ struct MenuBarIcon: View {
     let model: AppModel
 
     var body: some View {
-        Image(systemName: model.menuBarSymbol)
+        Image(nsImage: MenuBarGhost.image(badge: model.menuBarBadge))
             .accessibilityLabel(model.statusTitle)
     }
 }
@@ -18,6 +18,7 @@ struct MenuBarIcon: View {
 /// every Button a clickable item and `Menu` a submenu.
 struct MenuContent: View {
     let model: AppModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Text(model.statusTitle)
@@ -55,12 +56,32 @@ struct MenuContent: View {
             Text("⚠️ \(problem)")
         }
 
+        if let warning = model.storageWarning {
+            Divider()
+            Text("⚠️ \(warning)")
+            Button("Uvolnit místo…") { open(.storage) }
+        } else if model.expiredAudioCount > 0 {
+            Divider()
+            Button("Staré audio ke smazání: \(model.expiredAudioCount) nahrávek…") { open(.storage) }
+        }
+        if !model.vocabulary.suggestions.isEmpty {
+            Divider()
+            Button("Návrhy do slovníku: \(model.vocabulary.suggestions.count)…") { open(.vocabulary) }
+        }
+
         Divider()
+        Button("Otevřít Meeting Buddy…") { open(.vocabulary) }
+            .keyboardShortcut(",")
         Button("Znovu načíst nastavení") { model.reloadConfig() }
-        Button("Otevřít složku s daty") { NSWorkspace.shared.open(AppPaths.supportDirectory) }
         Divider()
-        Button("Ukončit Meeting Assistant") { NSApp.terminate(nil) }
+        Button("Ukončit Meeting Buddy") { NSApp.terminate(nil) }
             .keyboardShortcut("q")
+    }
+
+    private func open(_ section: WindowSection) {
+        model.windowSection = section
+        openWindow(id: MainWindow.id)
+        NSApp.activate()
     }
 
     @ViewBuilder
@@ -194,11 +215,11 @@ struct MenuContent: View {
 // MARK: - Texts shown in the menu
 
 extension AppModel {
-    var menuBarSymbol: String {
+    var menuBarBadge: MenuBarGhost.Badge {
         switch state {
-        case .idle, .declined: "waveform"
-        case .detected: "waveform.badge.exclamationmark"
-        case .recording: "record.circle.fill"
+        case .idle, .declined: .none
+        case .detected: .alert
+        case .recording: .recording
         }
     }
 

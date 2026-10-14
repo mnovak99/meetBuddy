@@ -145,3 +145,30 @@ Technical findings that are not obvious from the code. Product decisions live in
   status.json (made before step 3) are left alone; failed ones are retried from the menu.
 - On quit the pipeline is terminated (it is idempotent and continues on the next launch).
 - After `done`, frames not chosen for the note go to the Trash.
+
+## Step 4: GUI (2026-10-14)
+
+- The app is called **Meeting Buddy** (MeetingBuddy.app); bundle ID, data folder, logs and the Swift
+  module keep MeetingAssistant, so permissions and data carried over. Icon: a ghost with headphones
+  quietly listening, drawn in code (GhostDrawing) for the app icon and the menu bar.
+- Window: `Window` scene with `defaultLaunchBehavior(.suppressed)`, opened from the menu; while
+  open the app switches to `.regular` activation policy (Dock, ⌘Tab), back to `.accessory` on close.
+- Vocabulary, modeled on custom vocabularies of speech-to-text services (AWS Transcribe table,
+  AssemblyAI keyterms / custom spelling, OpenAI Whisper prompting guide):
+  - `inPrompt` = keyterm boosting via Whisper's `initial_prompt`, as a Czech glossary sentence
+    (Whisper imitates the prompt's style, ignores instructions, keeps the last 224 tokens; the
+    pipeline uses ≤ 200, counted with Whisper's tokenizer; the GUI estimates 2.3 chars/token).
+  - `aliases` + `autoReplace` = custom spelling: whole-word, case-insensitive replacement right
+    after transcription; off for aliases that are also common words.
+  - `description` = context for the Claude cleanup only.
+  - Review queue: the Claude cleanup proposes unknown terms (`vocabulary-suggestions.json`);
+    Přijmout / Upravit / Zamítnout; rejected terms never come back.
+  - CSV import/export: semicolon-separated (Czech Excel), UTF-8 with BOM, Czech or English headers.
+  - Occurrences in transcripts of the last 30 days, to prune unused terms.
+- Přehled: "Zpracovat znovu" continues, "Přepsat znovu od začátku" runs the pipeline with
+  `--force` (clears diarization, transcript, cleaned and summary caches).
+- Úložiště: old audio and whole recordings go to the Trash after a confirmation; notes older than
+  N months move to Meetings/Archiv/YYYY/MM with their attachments (links keep working).
+- Start at login: `SMAppService.mainApp` with the "requires approval" state handled.
+- The HF token can be replaced from Nastavení (stored with the `security` tool, like the pipeline
+  reads it).

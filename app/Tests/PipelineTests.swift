@@ -80,4 +80,12 @@ struct PipelineTests {
         #expect(invocation.environment["PATH"]?.hasPrefix("/Users/test/.local/bin:") == true)
         #expect(invocation.environment["PYANNOTE_METRICS_ENABLED"] == "0")
     }
+
+    @Test func forceStartsOver() {
+        let folder = URL(filePath: "/tmp/recordings/x")
+        let normal = PipelineCommand.make(folder: folder, config: AppConfig(), environment: [:])
+        let fresh = PipelineCommand.make(folder: folder, config: AppConfig(), environment: [:], force: true)
+        #expect(!normal.arguments.contains("--force"))
+        #expect(fresh.arguments.suffix(2) == ["--force", "/tmp/recordings/x"])
+    }
 }

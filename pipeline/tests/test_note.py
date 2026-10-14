@@ -149,3 +149,19 @@ def test_missing_vault_is_an_error(recording: Recording, tmp_path: Path) -> None
 )
 def test_clean_title(title: str, expected: str) -> None:
     assert clean_title(title) == expected
+
+
+def test_vocabulary_suggestions_reach_the_queue(
+    recording: Recording, vault: Path, tmp_path: Path
+) -> None:
+    queue = tmp_path / "vocabulary-suggestions.json"
+    parts = Components(
+        diarize=lambda s: [], transcribe=None, claude=fake_claude, suggestions_path=queue
+    )  # type: ignore[arg-type]
+
+    run_note(recording, SEGMENTS, parts, config(vault))
+
+    suggestions = json.loads(queue.read_text(encoding="utf-8"))["suggestions"]
+    assert [(s["term"], s["heardAs"], s["source"]) for s in suggestions] == [
+        ("Grafana", ["grafána"], "recording")
+    ]

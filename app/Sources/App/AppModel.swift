@@ -31,6 +31,14 @@ final class AppModel {
     private(set) var microphoneStatus: AVAudioApplication.recordPermission = .undetermined
     /// Runs the Python pipeline for finished recordings (read by the menu).
     let pipeline = PipelineRunner(config: AppConfig())
+    let vocabulary = VocabularyStore()
+    let library = RecordingLibrary()
+    /// The section shown in the window (the menu can open a specific one).
+    var windowSection: WindowSection = .vocabulary
+    /// Recordings take more space than `storageLimitGB` (text for the menu), or nil.
+    private(set) var storageWarning: String?
+    /// Recordings whose audio is older than `audioRetentionDays`.
+    private(set) var expiredAudioCount = 0
 
     @ObservationIgnored private var screenRecordingGrantedAtLaunch = false
     @ObservationIgnored private var detector = MeetingDetector(settings: DetectorSettings(config: AppConfig()))
@@ -66,7 +74,7 @@ final class AppModel {
     /// Called once from applicationDidFinishLaunching.
     func start() {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
-        Log.app.info("Meeting Assistant \(version, privacy: .public) starting")
+        Log.app.info("Meeting Buddy \(version, privacy: .public) starting")
         notifications.configure()
         loadConfig()
         // Recordings cut off by a crash are closed and processed like any other.
@@ -99,7 +107,46 @@ final class AppModel {
             microphoneStatus = MicrophonePermission.status
         }
         observePowerOff()
+        vocabulary.load()
+        checkStorage(notify: true)
         startPolling()
+    }
+
+    /// Re-runs the pipeline for a recording: continue (`fromScratch: false`) or start over.
+    func reprocess(_ item: RecordingItem, fromScratch: Bool) {
+        pipeline.enqueue(item.folder, force: fromScratch)
+        library.reload()
+    }
+
+    /// Moves a recording folder to the Trash (confirmed in the window first).
+    func deleteRecording(_ item: RecordingItem) {
+        do {
+            try library.trash(item)
+        } catch {
+            notifications.postInfo(
+                title: "Nahrávku nejde smazat", body: error.localizedDescription,
+                identifier: "delete-\(item.folder.lastPathComponent)")
+        }
+        checkStorage(notify: false)
+    }
+
+    /// Updates the storage warning; `notify`: also post a notification when over the limit.
+    func checkStorage(notify: Bool) {
+        library.reload()
+        let limit = Int64(config.storageLimitGB * 1_000_000_000)
+        expiredAudioCount = library.expiredAudio(retentionDays: config.audioRetentionDays).count
+        if library.totalBytes > limit {
+            let used = ByteCountFormatter.string(fromByteCount: library.totalBytes, countStyle: .file)
+            let total = ByteCountFormatter.string(fromByteCount: limit, countStyle: .file)
+            storageWarning = "Nahrávky zabírají \(used) z \(total)"
+            if notify {
+                notifications.postInfo(
+                    title: storageWarning ?? "", body: "Uvolni místo v Meeting Buddy → Úložiště.",
+                    identifier: "storage-limit")
+            }
+        } else {
+            storageWarning = nil
+        }
     }
 
     func reloadConfig() {
@@ -257,6 +304,8 @@ final class AppModel {
     }
 
     private func pipelineFinished(folder: URL, status: PipelineStatus?) {
+        vocabulary.reloadSuggestions()
+        checkStorage(notify: false)
         notifications.postPipelineFinished(
             folderName: folder.lastPathComponent, status: status,
             notePath: NoteResultFile.read(from: folder)?.notePath)

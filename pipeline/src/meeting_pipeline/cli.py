@@ -27,7 +27,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         description="Process a Meeting Assistant recording folder into an Obsidian note.",
     )
     parser.add_argument("recording_dir", type=Path, help="recordings/<YYYY-MM-DD_HHmm>_<slug>/")
-    parser.add_argument("--force", action="store_true", help="redo finished stages (transcription)")
+    parser.add_argument(
+        "--force", action="store_true", help="start over: forget all finished stages"
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -57,6 +59,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         write_status(recording_dir, state, message=message)
 
     report("Začínám")
+    if args.force:
+        stages.clear_caches(recording_dir)
     components = stages.default_components()
     try:
         segments, warning = stages.run_transcription(

@@ -11,7 +11,8 @@ You are cleaning up an automatic transcript of a work meeting. Answer only with 
   anglicisms and IT jargon are normal.
 
 ## Vocabulary
-Correct spelling of terms, abbreviations and names. Aliases are typical misrecognitions.
+Correct spelling of names, abbreviations and terms, with their meaning and how speech
+recognition tends to write them. Known misrecognitions may already be replaced.
 $vocabulary
 
 ## Tasks
@@ -25,6 +26,11 @@ $vocabulary
 3. **Drop:** ids of lines that are not real speech: Whisper hallucinations in silence (e.g.
    "Titulky vytvořil…", "Děkuji za pozornost." out of context, repeated phrases, music), or lines
    that are only an echo of another speaker's line.
+4. **Vocabulary suggestions:** rare words that are NOT in the vocabulary yet and that speech
+   recognition got wrong or that you are unsure about: names of people, products, companies,
+   abbreviations and technical terms. For each give the correct spelling (best guess), how it
+   appeared in the transcript (`heard_as`), the category and a short description (meaning of an
+   abbreviation, role of a person). No common words. At most 10; an empty list is fine.
 
 ## Transcript
 One line per segment: `#id [time] speaker (language): text`

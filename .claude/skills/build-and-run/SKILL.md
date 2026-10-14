@@ -14,16 +14,22 @@ description: Use when generating, building, signing, installing, running or debu
 ## Install and launch
 Always run the app from `/Applications`, so permissions and the `SMAppService` login item behave consistently.
 ```
-pkill -x MeetingAssistant || true
-ditto build/Build/Products/Debug/MeetingAssistant.app /Applications/MeetingAssistant.app
-open /Applications/MeetingAssistant.app
+pkill -x MeetingBuddy || true
+ditto build/Build/Products/Debug/MeetingBuddy.app /Applications/MeetingBuddy.app
+open /Applications/MeetingBuddy.app
 ```
 Keep this in `scripts/install.sh`.
 
 ## Signing
 - Identity: self-signed certificate "MeetingAssistant Dev" in the login keychain. Check with `security find-identity -v -p codesigning`.
 - Never ad-hoc sign: the identity would change every build and macOS would forget granted permissions.
-- Verify: `codesign -dv --verbose=4 /Applications/MeetingAssistant.app`.
+- Verify: `codesign -dv --verbose=4 /Applications/MeetingBuddy.app`.
+
+## Names
+The app is **Meeting Buddy** (`PRODUCT_NAME` MeetingBuddy), but the scheme, project, Swift module (`@testable import MeetingAssistant`), bundle ID, data folder and log subsystem keep `MeetingAssistant`.
+
+## Icons
+App icon PNGs are generated from `app/Sources/UI/GhostDrawing.swift`: `scripts/make-icons.sh`. The menu bar ghost is drawn at runtime (`MenuBarGhost`).
 
 ## Permissions (TCC)
 - Screen Recording is needed for window titles and capture. After granting it, the app must be restarted.
