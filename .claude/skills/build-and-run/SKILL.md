@@ -21,7 +21,7 @@ open /Applications/MeetingBuddy.app
 Keep this in `scripts/install.sh`.
 
 ## Signing
-- Identity: self-signed certificate "MeetingAssistant Dev" in the login keychain. Check with `security find-identity -v -p codesigning`.
+- Identity: self-signed certificate "MeetingAssistant Dev" in the login keychain, created by `scripts/create-signing-identity.sh`. Check with `security find-identity -v -p codesigning`.
 - Never ad-hoc sign: the identity would change every build and macOS would forget granted permissions.
 - Verify: `codesign -dv --verbose=4 /Applications/MeetingBuddy.app`.
 
@@ -43,3 +43,8 @@ App icon PNGs are generated from `app/Sources/UI/GhostDrawing.swift`: `scripts/m
 
 ## Editor support
 After generating the project, run `xcode-build-server config -project app/MeetingAssistant.xcodeproj -scheme MeetingAssistant` in the repo root, so sourcekit-lsp (swift-lsp plugin, VS Code) understands the project.
+
+## Releases
+- Add changes under `## [Unreleased]` in CHANGELOG.md while working.
+- `scripts/release.sh X.Y.Z [--draft]`: tests, version bump (app + pipeline + CHANGELOG), commit and tag, signed Release build, zip, `gh release create`. `--dry-run` builds the current version only.
+- Commit messages and release notes never mention Claude.
