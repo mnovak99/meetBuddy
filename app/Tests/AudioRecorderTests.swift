@@ -4,8 +4,8 @@ import Foundation
 import Testing
 @testable import MeetingAssistant
 
-/// Plays a quiet 440 Hz tone from this (test) process. `nonisolated`, because the render block
-/// runs on Core Audio's real-time thread, not on the main thread.
+/// Plays a very quiet 440 Hz tone (−34 dB) from this (test) process. `nonisolated`, because the
+/// render block runs on Core Audio's real-time thread, not on the main thread.
 private nonisolated final class TonePlayer: @unchecked Sendable {
     private let engine = AVAudioEngine()
 
@@ -17,7 +17,7 @@ private nonisolated final class TonePlayer: @unchecked Sendable {
             for buffer in UnsafeMutableAudioBufferListPointer(audioBufferList) {
                 guard let samples = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
                 for frame in 0..<Int(frameCount) {
-                    samples[frame] = 0.2 * Float(sin(2 * Double.pi * 440 * (start + Double(frame)) / 48_000))
+                    samples[frame] = 0.02 * Float(sin(2 * Double.pi * 440 * (start + Double(frame)) / 48_000))
                 }
             }
             return noErr
@@ -36,23 +36,27 @@ private nonisolated final class TonePlayer: @unchecked Sendable {
     }
 }
 
-/// Integration test on real Core Audio: the test process taps its own tone (muted, so nothing is
-/// heard). Verifies the tap, the aggregate device and the AAC file. The microphone is left out on
-/// purpose: a test must not record the user's voice.
+/// Integration test on real Core Audio: the test process taps its own tone. Verifies the tap, the
+/// aggregate device and the AAC file. The microphone is left out on purpose: a test must not record
+/// the user's voice.
+///
+/// Nothing should be heard: the muted tap exists before the tone starts (it attaches to the
+/// process by bundle ID) and the tone stops before the tap is removed.
 struct AudioRecorderTests {
     @Test(.timeLimit(.minutes(1)))
     func tapRecordsOwnProcessAudio() async throws {
-        let player = TonePlayer()
-        try player.start()
-        defer { player.stop() }
-        try await Task.sleep(for: .milliseconds(500))  // let the process appear in Core Audio
-
         let url = FileManager.default.temporaryDirectory.appending(path: "tap-\(UUID().uuidString).m4a")
         let bundleID = try #require(Bundle.main.bundleIdentifier)
         let recorder = AudioRecorder(
             bundleIDs: [bundleID], appFileURL: url, microphone: nil, bitRate: 32_000, muteBehavior: .muted)
         try recorder.start()
+
+        let player = TonePlayer()
+        try player.start()
         try await Task.sleep(for: .seconds(3))
+        player.stop()
+        try await Task.sleep(for: .milliseconds(200))  // the last buffers reach the file
+
         let stats = recorder.currentStats
         await recorder.stop()
 
