@@ -193,7 +193,13 @@ Tlačítko spouští build na tvém Macu, ne na serveru GitHubu. Appku tak podep
   cd ~/actions-runner && ./svc.sh stop && ./svc.sh uninstall
   ./config.sh remove --token "$(gh api -X POST repos/mnovak99/meetBuddy/actions/runners/remove-token --jq .token)"
   ```
-- Instalace na jiném Macu: GitHub → Settings → Actions → Runners → *New self-hosted runner* (macOS, ARM64). Při `./config.sh` přidej `--labels meeting-buddy`, pak `./svc.sh install && ./svc.sh start`.
+- Instalace na jiném Macu: GitHub → Settings → Actions → Runners → *New self-hosted runner* (macOS, ARM64). Při `./config.sh` přidej `--labels meeting-buddy`, pak:
+  ```sh
+  ./svc.sh install
+  # Bez vlastního bezpečnostního sezení, jinak codesign nemá přístup ke Klíčence (errSecInternalComponent):
+  plutil -remove SessionCreate ~/Library/LaunchAgents/actions.runner.*.plist
+  ./svc.sh start
+  ```
 
 ## Řešení problémů
 
