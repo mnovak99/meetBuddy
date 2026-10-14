@@ -11,6 +11,8 @@ Sekci `[Unreleased]` doplňuj průběžně; `scripts/release.sh` z ní při vyd�
 
 ### Opraveno
 - Testy nahrávání zvuku už při běhu nepípají.
+- Přepis se zasekával na kouscích zvuku kratších než sekunda (Whisper v nich halucinoval minuty): takové kousky se přeskočí a délka přepisu je omezená podle délky úseku.
+- Když se zpracování 30 minut nehne, appka ho ukončí a nahlásí místo nekonečného čekání.
 
 ## [0.4.0] – 2026-10-14
 

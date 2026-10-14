@@ -88,4 +88,15 @@ struct PipelineTests {
         #expect(!normal.arguments.contains("--force"))
         #expect(fresh.arguments.suffix(2) == ["--force", "/tmp/recordings/x"])
     }
+
+    @Test func runWithoutProgressCountsAsStalled() {
+        let status = PipelineStatus(state: .transcribing, updatedAt: "2026-10-14T15:10:47+02:00", message: "Přepisuji 10/12")
+        let updated = ISO8601DateFormatter().date(from: status.updatedAt)!
+        #expect(!PipelineQueue.isStalled(status, now: updated.addingTimeInterval(29 * 60), timeout: 30 * 60))
+        #expect(PipelineQueue.isStalled(status, now: updated.addingTimeInterval(31 * 60), timeout: 30 * 60))
+        // A finished run is never stalled.
+        let done = PipelineStatus(state: .done, updatedAt: status.updatedAt)
+        #expect(!PipelineQueue.isStalled(done, now: updated.addingTimeInterval(3600), timeout: 30 * 60))
+    }
 }
+

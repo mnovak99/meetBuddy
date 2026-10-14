@@ -100,6 +100,7 @@ def transcribe(
         # Each chunk stands alone; carrying text over makes Whisper repeat itself in silence.
         condition_on_previous_text=False,
         verbose=None,
+        sample_len=max_tokens(len(samples) / SAMPLE_RATE),
     )
     segments = [
         RawSegment(start=float(s["start"]), end=float(s["end"]), text=s["text"].strip())
@@ -107,3 +108,13 @@ def transcribe(
         if s["text"].strip()
     ]
     return str(result["language"]), segments
+
+
+def max_tokens(seconds: float) -> int:
+    """Upper bound of tokens Whisper may generate for a chunk (its own maximum is 224 per window).
+
+    Speech has at most ~8 tokens per second. Without this bound, a hallucination on a nearly
+    silent chunk runs to 224 tokens at every one of Whisper's six temperature retries, which on
+    a busy GPU at background priority takes many minutes.
+    """
+    return min(224, int(seconds * 8) + 16)

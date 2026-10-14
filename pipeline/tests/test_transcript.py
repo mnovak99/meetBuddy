@@ -76,3 +76,20 @@ def test_segments_are_sorted_by_time() -> None:
 def test_readable_text() -> None:
     text = transcript_text([Segment(3725.4, 3727, "SPEAKER_00", "app", "sk", "Dobrý deň")])
     assert text == "[01:02:05] SPEAKER_00 (sk): Dobrý deň\n"
+
+
+def test_pieces_shorter_than_a_second_are_not_transcribed() -> None:
+    transcriber = FakeTranscriber(languages=["cs"])
+    turns = [Turn(0, 5, "A"), Turn(8, 8.6, "B"), Turn(10, 10.4, "A")]
+
+    segments = build_transcript(silence(12), None, turns, transcriber, None)
+
+    assert [s.speaker for s in segments] == ["A"]
+    assert len(transcriber.calls) == 1
+
+
+def test_token_budget_follows_the_chunk_length() -> None:
+    from meeting_pipeline.models import max_tokens
+
+    assert max_tokens(1.0) == 24
+    assert max_tokens(60.0) == 224  # Whisper's own maximum per 30 s window

@@ -58,6 +58,14 @@ nonisolated enum PipelineQueue {
         return status.state == .queued || status.isInProgress || status.state == .needsSummary
     }
 
+    /// A run in progress whose status.json has not changed for `timeout`.
+    static func isStalled(_ status: PipelineStatus, now: Date, timeout: TimeInterval) -> Bool {
+        guard status.isInProgress, let updated = ISO8601DateFormatter().date(from: status.updatedAt) else {
+            return false
+        }
+        return now.timeIntervalSince(updated) > timeout
+    }
+
     /// Recording folders to resume, oldest first (folder names start with the date).
     static func pending(in recordingsDirectory: URL) -> [URL] {
         let folders = (try? FileManager.default.contentsOfDirectory(

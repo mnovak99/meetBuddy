@@ -26,6 +26,8 @@ USER_SPEAKER = "USER"
 ALLOWED_LANGUAGES = ("cs", "sk", "en")
 DEFAULT_LANGUAGE = "cs"
 SHORT_CHUNK_SECONDS = 3.0
+# Shorter pieces ("mhm", a cough) carry no words worth having; Whisper only invents text in them.
+MIN_CHUNK_SECONDS = 1.0
 # A little audio around each chunk, so Whisper does not cut words at the edges.
 CHUNK_PADDING = 0.2
 TRANSCRIPT_FILE = "transcript.json"
@@ -91,11 +93,15 @@ def build_transcript(
     initial_prompt: str | None,
     progress: Progress | None = None,
 ) -> list[Segment]:
-    jobs = [_Job(chunk, "app", app_samples) for chunk in speaker_chunks(turns)]
+    jobs = [
+        _Job(chunk, "app", app_samples)
+        for chunk in speaker_chunks(turns, min_duration=MIN_CHUNK_SECONDS)
+    ]
     if mic_samples is not None:
         jobs += [
             _Job(Turn(start, end, USER_SPEAKER), "mic", mic_samples)
             for start, end in speech_regions(mic_samples)
+            if end - start >= MIN_CHUNK_SECONDS
         ]
     total = len(jobs)
     done = 0

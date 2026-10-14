@@ -21,6 +21,12 @@ final class PipelineRunner {
     @ObservationIgnored private var process: Process?
     /// Queued recordings to process from scratch ("Přepsat znovu od začátku").
     @ObservationIgnored private var startOver: Set<URL> = []
+    /// Set when the watchdog stopped a run that made no progress.
+    @ObservationIgnored private var stalled = false
+
+    /// Without a status update for this long, a run counts as stuck. Every step reports progress
+    /// well within it (one Whisper chunk, one Claude call, diarization of a long meeting).
+    static let stallTimeout: TimeInterval = 30 * 60
 
     static let logFileName = "pipeline.log"
 
@@ -62,9 +68,15 @@ final class PipelineRunner {
     }
 
     /// Called every poll: reads the progress of the running recording.
-    func refresh() {
+    func refresh(now: Date = .now) {
         guard let current else { return }
         currentStatus = PipelineStatus.read(from: current)
+        if let status = currentStatus, PipelineQueue.isStalled(status, now: now, timeout: Self.stallTimeout),
+           let process, process.isRunning, !stalled {
+            Log.pipeline.error("Pipeline stalled at \(status.message ?? "?", privacy: .public), stopping it")
+            stalled = true
+            process.terminate()
+        }
     }
 
     /// The app quits: stop the running pipeline. It is idempotent, so the next launch continues.
@@ -126,10 +138,14 @@ final class PipelineRunner {
         var status = PipelineStatus.read(from: folder)
         if status == nil || status?.isInProgress == true || status?.state == .queued {
             // Killed or crashed before writing a final state.
+            let minutes = Int(Self.stallTimeout / 60)
             status = PipelineStatus(
                 state: .failed, updatedAt: RecordingMetaStore.isoString(Date()),
-                error: "Pipeline skončila s kódem \(exitCode), podrobnosti v \(Self.logFileName)")
+                error: stalled
+                    ? "Zpracování se zaseklo (\(minutes) min beze změny u „\(status?.message ?? "?")“), ukončeno. Dej „Zkusit znovu“."
+                    : "Pipeline skončila s kódem \(exitCode), podrobnosti v \(Self.logFileName)")
         }
+        stalled = false
         Log.pipeline.notice("Pipeline finished for \(folder.lastPathComponent, privacy: .public): \(status?.state.rawValue ?? "?", privacy: .public) (exit \(exitCode))")
         lastFolder = folder
         lastStatus = status
