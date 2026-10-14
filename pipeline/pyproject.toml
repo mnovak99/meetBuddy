@@ -1,6 +1,6 @@
 [project]
 name = "meeting-pipeline"
-version = "0.1.0"
+version = "0.4.1"
 description = "Meeting Assistant pipeline: transcription, diarization, summary and Obsidian note."
 requires-python = ">=3.12"
 dependencies = [

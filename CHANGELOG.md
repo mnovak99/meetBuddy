@@ -5,6 +5,8 @@ Sekci `[Unreleased]` doplňuj průběžně; `scripts/release.sh` z ní při vyd�
 
 ## [Unreleased]
 
+## [0.4.1] – 2026-10-14
+
 ### Přidáno
 - Vydání tlačítkem na GitHubu (Actions → Release → Run workflow) přes runner na Macu mini; volba patch / minor / major, koncept nebo zkouška.
 - Poznámky k vydání z commitů, když v CHANGELOGu nic není.
@@ -51,7 +53,8 @@ Sekci `[Unreleased]` doplňuj průběžně; `scripts/release.sh` z ní při vyd�
 - Notifikace „Nahrávat?“ a „Meeting pravděpodobně skončil“, ošetřená oprávnění.
 - `config.json` se schématem, kostra Python pipeline.
 
-[Unreleased]: https://github.com/mnovak99/meetBuddy/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/mnovak99/meetBuddy/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/mnovak99/meetBuddy/releases/tag/v0.4.1
 [0.4.0]: https://github.com/mnovak99/meetBuddy/releases/tag/v0.4.0
 [0.3.0]: https://github.com/mnovak99/meetBuddy/releases/tag/v0.3.0
 [0.2.0]: https://github.com/mnovak99/meetBuddy/releases/tag/v0.2.0
