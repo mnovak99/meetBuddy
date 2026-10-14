@@ -15,5 +15,8 @@
   "frameChangeThreshold": 0.08,
   "audioRetentionDays": 7,
   "storageLimitGB": 10,
-  "obsidianVaultPath": ""
+  "obsidianVaultPath": "",
+  "microphoneName": "Arctis Nova 7",
+  "pipelinePath": "~/Work/meetHelper/pipeline",
+  "uvPath": "~/.local/bin/uv"
 }

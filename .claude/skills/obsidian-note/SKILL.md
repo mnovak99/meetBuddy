@@ -9,7 +9,7 @@ description: Use when generating, changing or testing the Obsidian meeting note:
 - Vault path from `config.json` (`obsidianVaultPath`).
 - Note: `Meetings/YYYY/MM/YYYY-MM-DD HHmm <Title>.md`. Title = calendar event title, otherwise empty (just date and time). Strip characters invalid in file names.
 - Attachments: `Meetings/YYYY/MM/attachments/YYYY-MM-DD HHmm/<HHmmss>.jpg` (only key frames chosen by the summary).
-- Never overwrite a note the user may have edited: on re-run write `… (2).md` unless frontmatter `status` is still `processing`.
+- Never overwrite a note the user may have edited: on re-run write `… (2).md` unless frontmatter `status` is still `processing` or `needs_summary` (unfinished notes written by the pipeline).
 
 ## Template
 ```markdown
@@ -52,6 +52,6 @@ Krátký popis, proč je to důležité.
 ## Rules
 - Note text in Czech; transcript in the original language.
 - Nothing invented: if unsure, leave the section out or mark it „(?)“. Empty sections are omitted.
-- The user's own voice is not recorded, so his statements are missing. „Moje úkoly“ = tasks assigned to him by name (`userName` in config) or clearly addressed to him.
+- The user's own voice is in `mic.m4a` (speaker = `userName` in config). „Moje úkoly“ = tasks assigned to him by name, clearly addressed to him, or that he took on himself.
 - Also append his tasks to `Meetings/Moje úkoly.md` as `- [ ] úkol ([[YYYY-MM-DD HHmm Title]])`, never duplicating existing lines.
 - No Obsidian plugins required; only core Markdown, callouts and wiki-links.

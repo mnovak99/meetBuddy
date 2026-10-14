@@ -34,7 +34,7 @@ nonisolated final class AACFileWriter {
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
             AVSampleRateKey: inputFormat.sampleRate,
-            AVNumberOfChannelsKey: 1,
+            AVNumberOfChannelsKey: inputFormat.channelCount,
             AVEncoderBitRateKey: bitRate,
         ]
         // Invalid settings would raise an Objective-C exception (a crash) instead of an error.

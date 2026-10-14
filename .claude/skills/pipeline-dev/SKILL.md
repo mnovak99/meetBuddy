@@ -7,7 +7,7 @@ description: Use when working on the Python pipeline in pipeline/ (transcription
 
 ## Basics
 - Managed by uv: `cd pipeline && uv sync`, `uv run pytest`, `uv run ruff check --fix`.
-- Entry point: `uv run meeting-pipeline <recording-dir>`. It reads `meta.json`, `audio.m4a` and `frames/`, and writes `status.json` (`queued` → `transcribing` → `summarizing` → `writing` → `done` | `failed` + `error`).
+- Entry point: `uv run meeting-pipeline <recording-dir>`. It reads `meta.json`, `audio.m4a` (the other participants), `mic.m4a` (the user, may be missing: see `meta.json` → `microphone`) and `frames/`, and writes `status.json` (`queued` → `transcribing` → `summarizing` → `writing` → `done` | `failed` + `error`).
 - The pipeline must be safe to re-run on the same folder (idempotent; reuse finished intermediate results like `transcript.json`).
 
 ## Fixtures
@@ -22,6 +22,8 @@ description: Use when working on the Python pipeline in pipeline/ (transcription
 
 ## Diarization
 - pyannote.audio; needs `HF_TOKEN` (read from the macOS Keychain or env, never from repo files) and accepted model terms on Hugging Face.
+- Diarize only `audio.m4a`. `mic.m4a` is always the user; both files share one timeline (same start, same clock).
+- If the user listened on speakers, `mic.m4a` also contains the others (echo): prefer `audio.m4a` for their speech.
 - Output: anonymous speakers. Names are assigned later by Claude.
 
 ## Claude step

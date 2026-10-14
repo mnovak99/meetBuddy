@@ -14,5 +14,6 @@ nonisolated enum Log {
     static let detection = Logger(subsystem: subsystem, category: "detection")
     static let notifications = Logger(subsystem: subsystem, category: "notifications")
     static let permissions = Logger(subsystem: subsystem, category: "permissions")
+    static let pipeline = Logger(subsystem: subsystem, category: "pipeline")
     static let recording = Logger(subsystem: subsystem, category: "recording")
 }

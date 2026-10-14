@@ -19,6 +19,13 @@ nonisolated struct AppConfig: Equatable, Sendable {
     var audioRetentionDays = 7
     var storageLimitGB: Double = 10
     var obsidianVaultPath = ""
+    /// Microphone recorded into mic.m4a: the first input device whose name contains this text.
+    /// Empty = do not record the microphone.
+    var microphoneName = "Arctis Nova 7"
+    /// The Python pipeline project (`uv run --project <pipelinePath> meeting-pipeline`).
+    var pipelinePath = "~/Work/meetHelper/pipeline"
+    /// uv executable; GUI apps do not see the shell PATH, so the full path is needed.
+    var uvPath = "~/.local/bin/uv"
 
     /// Values outside the ranges allowed by the schema are clamped, so a typo cannot break detection.
     func sanitized() -> AppConfig {
@@ -37,7 +44,7 @@ nonisolated extension AppConfig: Codable {
     enum CodingKeys: String, CodingKey {
         case schemaVersion, userName, pollIntervalSeconds, detectionConfirmSeconds, endSilenceMinutes
         case enabledSources, minDurationMinutes, frameIntervalSeconds, frameMaxDimension, frameChangeThreshold
-        case audioRetentionDays, storageLimitGB, obsidianVaultPath
+        case audioRetentionDays, storageLimitGB, obsidianVaultPath, microphoneName, pipelinePath, uvPath
     }
 
     /// Custom decoding: take each key only if it is present, otherwise keep the default.
@@ -70,6 +77,9 @@ nonisolated extension AppConfig: Codable {
         storageLimitGB = try c.decodeIfPresent(Double.self, forKey: .storageLimitGB) ?? storageLimitGB
         obsidianVaultPath = try c.decodeIfPresent(String.self, forKey: .obsidianVaultPath)
             ?? obsidianVaultPath
+        microphoneName = try c.decodeIfPresent(String.self, forKey: .microphoneName) ?? microphoneName
+        pipelinePath = try c.decodeIfPresent(String.self, forKey: .pipelinePath) ?? pipelinePath
+        uvPath = try c.decodeIfPresent(String.self, forKey: .uvPath) ?? uvPath
     }
 }
 

@@ -28,7 +28,9 @@ Keep this in `scripts/install.sh`.
 ## Permissions (TCC)
 - Screen Recording is needed for window titles and capture. After granting it, the app must be restarted.
 - Reset when testing first-run flows: `tccutil reset ScreenCapture dev.matej.MeetingAssistant` (likewise `Calendar`).
-- The app must never request microphone access.
+- Microphone (for `mic.m4a`) is requested at launch: `tccutil reset Microphone dev.matej.MeetingAssistant`.
+- System audio recording (Core Audio tap) is asked on the first recording: `tccutil reset AudioCapture dev.matej.MeetingAssistant`.
+- Never put a device with a microphone into the aggregate device without the Microphone permission: macOS refuses it silently and no audio arrives at all.
 
 ## Logs
 `/usr/bin/log stream --level debug --predicate 'subsystem == "dev.matej.MeetingAssistant"'` (full path: in zsh `log` is a builtin)

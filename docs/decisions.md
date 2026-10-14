@@ -96,3 +96,52 @@ Technical findings that are not obvious from the code. Product decisions live in
 ### Short recordings
 - Shorter than `minDurationMinutes` → notification "Zahodit / Ponechat" (also in the menu).
   "Zahodit" moves the folder to the Trash; no answer keeps it.
+
+## Step 2b: microphone (2026-10-14)
+
+- Changed decision (user): the user's microphone is recorded too, as a separate track `mic.m4a`.
+  Fixed device by name (`microphoneName`, default "Arctis Nova 7"); muting is done on the headset.
+- The microphone device is a sub-device (and the clock) of the same aggregate device as the tap,
+  so one IOProc delivers both streams and the files share one timeline. Verified stream layout on
+  this Mac (device inspected without starting IO): input streams = [microphone (terminal "micr"),
+  tap (terminal 0)]. `AudioStreamLayout` maps streams to buffers by terminal type.
+- The Microphone permission is requested at launch. Without it (or without the device) the
+  microphone is left out of the aggregate device; otherwise macOS would refuse the whole device.
+- The output stream of the headset is part of the aggregate device; the IOProc writes silence to it.
+
+## Step 3: pipeline (2026-10-14)
+
+### Transcription (3a)
+- Audio is decoded with macOS `afconvert` to 16 kHz mono and passed to both models as NumPy arrays
+  (no file decoding inside the models). ffmpeg is installed only because torchcodec (pyannote) wants it.
+- Diarization: `pyannote/speaker-diarization-community-1` (pyannote.audio 4), runs locally (MPS when
+  available), telemetry off (`PYANNOTE_METRICS_ENABLED=0`). Uses `exclusive_speaker_diarization`
+  (no overlapping turns, meant for transcription). Gated model: HF token from the Keychain
+  (service "MeetingAssistant HF token") and accepted model conditions.
+- Whisper `mlx-community/whisper-large-v3-turbo` per speaker chunk, so Czech and Slovak speakers
+  get their own detected language. Chunks < 3 s take the speaker's (or meeting's) language;
+  languages outside cs/sk/en are redone as Czech. Verified with macOS voices: Zuzana → cs,
+  Laura → sk, both transcribed exactly. ~1.7 s per short chunk on the M4 after the model is cached.
+- mic.m4a: energy-based speech regions (headset mic, digital silence when muted), speaker "USER".
+- Cached in the recording folder: diarization.json, transcript.json (+ transcript.txt to read).
+
+### Claude and the note (3b)
+- `claude -p --output-format json --json-schema … --no-session-persistence`, prompt on stdin,
+  ANTHROPIC_API_KEY removed, Bash/Edit/Write/Web disallowed; the answer is in `structured_output`.
+- Two calls: clean (speaker names from calendar + content, term corrections, hallucinations to
+  drop; no tools) and summary (note content; Read tool to look at frames). Cached in cleaned.json
+  and summary.json. One retry per call; on failure the note has the transcript only and status
+  `needs_summary`, replaced by the full note on a re-run.
+- Verified end to end with real Whisper + Claude (fake diarization): names, the user's task with
+  its deadline, open questions marked as unanswered, nothing invented. 26 s for a short meeting.
+
+### App integration (3c)
+- After a recording (or "Ponechat" for a short one) the app writes status.json `queued` and runs
+  `/usr/sbin/taskpolicy -b <uv> run --project <pipelinePath> meeting-pipeline <folder>`, one
+  recording at a time; output goes to pipeline.log in the recording folder.
+- GUI apps do not get the shell PATH: `uvPath` and `pipelinePath` are in config.json, PATH gets
+  ~/.local/bin and /opt/homebrew/bin (claude, ffmpeg).
+- At launch: queued, interrupted and needs_summary recordings are resumed; recordings without
+  status.json (made before step 3) are left alone; failed ones are retried from the menu.
+- On quit the pipeline is terminated (it is idempotent and continues on the next launch).
+- After `done`, frames not chosen for the note go to the Trash.

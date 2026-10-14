@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "terms": [
+    {
+      "term": "Kubernetes",
+      "aliases": ["kubernetis", "kubernetes"],
+      "description": "Container orchestration platform",
+      "priority": 1
+    },
+    {
+      "term": "Confluence",
+      "aliases": ["konfluens"],
+      "priority": 1
+    },
+    {
+      "term": "PR",
+      "aliases": ["pí ár", "píár"],
+      "description": "Pull request",
+      "priority": 2
+    }
+  ]
+}

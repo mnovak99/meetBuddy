@@ -12,6 +12,8 @@ final class RecordingController {
     private(set) var audioError: String?
     /// The tap has delivered real sound at least once in the last two minutes.
     private(set) var hasAudioSignal = false
+    /// The microphone track carried sound in the last few seconds (the user is speaking).
+    private(set) var hasMicSignal = false
     /// Long digital silence while the app is playing: the audio permission is probably missing.
     private(set) var silenceSuspected = false
     private(set) var windowUnavailable = false
@@ -21,7 +23,7 @@ final class RecordingController {
     /// Called when the meeting window stops / starts being capturable (for a notification).
     @ObservationIgnored var onWindowAvailabilityChanged: ((_ available: Bool) -> Void)?
 
-    @ObservationIgnored private let audio: AudioTapRecorder
+    @ObservationIgnored private let audio: AudioRecorder
     @ObservationIgnored private var frames: FrameCapturer?
     @ObservationIgnored private let config: AppConfig
 
@@ -29,10 +31,14 @@ final class RecordingController {
     static let silenceWarningSeconds: TimeInterval = 120
     /// The audio device must deliver its first buffers within this time after the start.
     static let noAudioDataSeconds: TimeInterval = 10
+    static let micFile = "mic.m4a"
 
     /// Creates the recording folder and starts capturing. Throws only if the folder cannot be created;
     /// audio or frame problems are reported in the menu and in meta.json instead.
-    init(session: MeetingSession, tappedBundleIDs: [String], calendarEvent: CalendarEventInfo?, config: AppConfig) throws {
+    init(
+        session: MeetingSession, tappedBundleIDs: [String], calendarEvent: CalendarEventInfo?,
+        config: AppConfig, microphoneAuthorized: Bool
+    ) throws {
         self.session = session
         self.config = config
         let startedAt = session.acceptedAt ?? Date()
@@ -53,9 +59,12 @@ final class RecordingController {
             appVersion: version
         )
         meta = initialMeta
-        audio = AudioTapRecorder(
-            bundleIDs: tappedBundleIDs, fileURL: folder.appending(path: initialMeta.audio.file),
-            bitRate: initialMeta.audio.bitRate)
+        let microphone = config.microphoneName.isEmpty ? nil : AudioRecorder.MicrophoneRequest(
+            deviceName: config.microphoneName, fileURL: folder.appending(path: Self.micFile),
+            isAuthorized: microphoneAuthorized)
+        audio = AudioRecorder(
+            bundleIDs: tappedBundleIDs, appFileURL: folder.appending(path: initialMeta.audio.file),
+            microphone: microphone, bitRate: initialMeta.audio.bitRate)
         saveMeta()
         Log.recording.notice("Recording started: \(self.folder.lastPathComponent, privacy: .public)")
 
@@ -94,6 +103,7 @@ final class RecordingController {
             meta.audio.sampleRate = rate
             saveMeta()
         }
+        hasMicSignal = stats.lastMicSignalAt.map { now.timeIntervalSince($0) < 5 } ?? false
         let lastSignal = stats.lastSignalAt ?? meta.startedAt
         hasAudioSignal = stats.lastSignalAt.map { now.timeIntervalSince($0) < Self.silenceWarningSeconds } ?? false
 
@@ -127,6 +137,13 @@ final class RecordingController {
     private func startAudio() {
         do {
             try audio.start()
+            if !config.microphoneName.isEmpty {
+                let recorded = audio.microphoneDeviceName != nil
+                meta.microphone = RecordingMeta.Microphone(
+                    file: recorded ? Self.micFile : nil, device: audio.microphoneDeviceName,
+                    error: audio.microphoneProblem)
+                saveMeta()
+            }
         } catch {
             audioError = error.localizedDescription
             meta.audio.error = error.localizedDescription

@@ -1,3 +1,4 @@
+import AVFAudio
 import AppKit
 import EventKit
 import Foundation
@@ -27,6 +28,9 @@ final class AppModel {
     private(set) var notificationStatus: UNAuthorizationStatus = .notDetermined
     private(set) var notificationAlertStyle: UNAlertStyle = .none
     private(set) var calendarStatus: EKAuthorizationStatus = .notDetermined
+    private(set) var microphoneStatus: AVAudioApplication.recordPermission = .undetermined
+    /// Runs the Python pipeline for finished recordings (read by the menu).
+    let pipeline = PipelineRunner(config: AppConfig())
 
     @ObservationIgnored private var screenRecordingGrantedAtLaunch = false
     @ObservationIgnored private var detector = MeetingDetector(settings: DetectorSettings(config: AppConfig()))
@@ -51,6 +55,12 @@ final class AppModel {
         notifications.onChoice = { [weak self] choice, sessionID in
             self?.handle(choice, sessionID: sessionID)
         }
+        notifications.onOpenNote = { [weak self] path in
+            self?.openNote(path)
+        }
+        pipeline.onFinished = { [weak self] folder, status in
+            self?.pipelineFinished(folder: folder, status: status)
+        }
     }
 
     /// Called once from applicationDidFinishLaunching.
@@ -59,7 +69,11 @@ final class AppModel {
         Log.app.info("Meeting Assistant \(version, privacy: .public) starting")
         notifications.configure()
         loadConfig()
-        RecordingRecovery.closeInterrupted(in: RecordingFolder.recordingsDirectory)
+        // Recordings cut off by a crash are closed and processed like any other.
+        for folder in RecordingRecovery.closeInterrupted(in: RecordingFolder.recordingsDirectory) {
+            pipeline.enqueue(folder, start: false)
+        }
+        pipeline.resumePending()
 
         screenRecordingGrantedAtLaunch = ScreenRecordingPermission.isGranted
         screenRecordingGranted = screenRecordingGrantedAtLaunch
@@ -70,7 +84,7 @@ final class AppModel {
             ScreenRecordingPermission.request()
         }
 
-        // One system prompt after another: notifications first, then the calendar.
+        // One system prompt after another: notifications, calendar, microphone.
         Task {
             await notifications.requestAuthorization()
             await refreshNotificationSettings()
@@ -78,6 +92,11 @@ final class AppModel {
                 await calendar.requestAccess()
             }
             calendarStatus = calendar.status
+            if !config.microphoneName.isEmpty && MicrophonePermission.status == .undetermined {
+                let granted = await MicrophonePermission.request()
+                Log.permissions.info("Microphone permission granted: \(granted)")
+            }
+            microphoneStatus = MicrophonePermission.status
         }
         observePowerOff()
         startPolling()
@@ -165,11 +184,31 @@ final class AppModel {
         pendingShortRecording = nil
         notifications.removeNotifications(for: pending.meta.id)
         Log.recording.info("Short recording kept: \(pending.folder.lastPathComponent, privacy: .public)")
+        pipeline.enqueue(pending.folder)
+    }
+
+    /// "Zkusit znovu": process the last recording again (e.g. after a failure or a Claude limit).
+    func retryLastProcessing() {
+        guard let folder = pipeline.lastFolder else { return }
+        pipeline.enqueue(folder)
+    }
+
+    /// Opens a note in Obsidian (its URL scheme finds the vault by the file path).
+    func openNote(_ path: String) {
+        var components = URLComponents()
+        components.scheme = "obsidian"
+        components.host = "open"
+        components.queryItems = [URLQueryItem(name: "path", value: path)]
+        if let url = components.url, NSWorkspace.shared.open(url) {
+            return
+        }
+        NSWorkspace.shared.open(URL(filePath: path))
     }
 
     /// Before the app quits: close a running recording properly.
     func prepareForTermination() async {
         await finishRecording(reason: .appQuit)
+        pipeline.terminate()
     }
 
     // MARK: - Recording
@@ -179,7 +218,7 @@ final class AppModel {
         do {
             let controller = try RecordingController(
                 session: session, tappedBundleIDs: tappedBundleIDs(for: session.source),
-                calendarEvent: event, config: config)
+                calendarEvent: event, config: config, microphoneAuthorized: MicrophonePermission.isGranted)
             controller.onWindowAvailabilityChanged = { [weak self] available in
                 self?.windowAvailabilityChanged(available)
             }
@@ -208,9 +247,19 @@ final class AppModel {
 
         let minimum = config.minDurationMinutes * 60
         if reason == .user, let duration = meta.durationSeconds, duration < minimum {
+            // Processed only after "Ponechat".
             pendingShortRecording = ShortRecording(meta: meta, folder: recording.folder)
             notifications.postShortRecording(meta)
+        } else {
+            // When the app or the Mac is shutting down, only mark it queued for the next launch.
+            pipeline.enqueue(recording.folder, start: reason == .user)
         }
+    }
+
+    private func pipelineFinished(folder: URL, status: PipelineStatus?) {
+        notifications.postPipelineFinished(
+            folderName: folder.lastPathComponent, status: status,
+            notePath: NoteResultFile.read(from: folder)?.notePath)
     }
 
     /// Bundle IDs to tap: the app itself and every helper process of it that talks to Core Audio.
@@ -254,6 +303,7 @@ final class AppModel {
         config = result.config
         configProblem = result.problem
         detector.settings = DetectorSettings(config: config)
+        pipeline.updateConfig(config)
     }
 
     /// Polls every `pollIntervalSeconds` on the main actor until cancelled.
@@ -272,6 +322,7 @@ final class AppModel {
         refreshScreenRecording()
         await refreshNotificationSettings()
         calendarStatus = calendar.status
+        microphoneStatus = MicrophonePermission.status
 
         let snapshot = snapshotProvider.capture(watching: MeetingSource.allCases)
         lastSnapshot = snapshot
@@ -283,6 +334,7 @@ final class AppModel {
         }
         syncState()
         refreshRecordingStatus()
+        pipeline.refresh()
     }
 
     private func refreshRecordingStatus() {

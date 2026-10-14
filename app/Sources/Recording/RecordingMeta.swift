@@ -16,6 +16,8 @@ nonisolated struct RecordingMeta: Codable, Equatable, Sendable {
     var endReason: RecordingEndReason?
     var window: Window?
     var audio: Audio
+    /// The user's microphone track (mic.m4a), aligned with audio.m4a. Nil in old recordings.
+    var microphone: Microphone?
     var frames: [Frame] = []
     /// The calendar event the meeting most likely belongs to (nil without calendar access or event).
     var calendar: CalendarEventInfo?
@@ -37,6 +39,13 @@ nonisolated struct RecordingMeta: Codable, Equatable, Sendable {
         var tappedBundleIDs: [String]
         /// The recording stayed silent although the app was playing (missing permission?).
         var silenceSuspected = false
+        var error: String?
+    }
+
+    struct Microphone: Codable, Equatable, Sendable {
+        /// "mic.m4a", or nil when the microphone was not recorded (see `error`).
+        var file: String?
+        var device: String?
         var error: String?
     }
 

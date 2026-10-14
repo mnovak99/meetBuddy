@@ -27,6 +27,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.start()
     }
 
+    /// A running pipeline is stopped; it continues on the next launch (it skips finished work).
+    func applicationWillTerminate(_ notification: Notification) {
+        model.pipeline.terminate()
+    }
+
     /// Quitting while recording: finish the audio file and meta.json first, then quit.
     /// `.terminateLater` tells macOS to wait until `reply(toApplicationShouldTerminate:)`.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

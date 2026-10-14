@@ -1,6 +1,6 @@
 # Meeting Assistant
 
-Osobní macOS appka (nikdy se nepublikuje). Běží v menu baru na Mac mini, detekuje online meetingy, po potvrzení nahraje zvuk meeting aplikace a klíčové snímky sdíleného obsahu a po meetingu vytvoří poznámku v Obsidianu (shrnutí + plný přepis).
+Osobní macOS appka (nikdy se nepublikuje). Běží v menu baru na Mac mini, detekuje online meetingy, po potvrzení nahraje zvuk meeting aplikace, mikrofon uživatele a klíčové snímky sdíleného obsahu a po meetingu vytvoří poznámku v Obsidianu (shrnutí + plný přepis).
 
 ## Prostředí a uživatel
 - Mac mini M4 (2025), 16 GB RAM, macOS 26 Tahoe, disk 256 GB (volných ~84 GB).
@@ -15,7 +15,7 @@ Dvě části, komunikují přes soubory:
 Sdílený stav v `~/Library/Application Support/MeetingAssistant/`:
 - `config.json` – nastavení (čte Swift i Python, schéma v `shared/config.schema.json`)
 - `vocabulary.json` – slovník termínů, zkratek a jmen
-- `recordings/<YYYY-MM-DD_HHmm>_<slug>/` – `meta.json`, `audio.m4a`, `frames/*.jpg`, `status.json`
+- `recordings/<YYYY-MM-DD_HHmm>_<slug>/` – `meta.json`, `audio.m4a` (ostatní), `mic.m4a` (uživatel), `frames/*.jpg`, `status.json`
 
 Po skončení nahrávání Swift spustí `uv run --project <pipeline> meeting-pipeline <dir>` s nízkou prioritou (`taskpolicy -b`) a sleduje `status.json`.
 
@@ -38,9 +38,10 @@ docs/       rozhodnutí a poznámky
 - Ruční start nahrávání z menu (výslovná volba uživatele, např. když detekce selže).
 
 **Zvuk**
-- **Nahrávat jen zvuk meeting aplikace. Mikrofon nikdy.** Appka nesmí žádat o přístup k mikrofonu.
+- Dvě oddělené stopy sladěné v čase (jedno agregované zařízení): `audio.m4a` = zvuk meeting aplikace (ostatní účastníci), `mic.m4a` = mikrofon uživatele, pevně Arctis Nova 7 (`microphoneName` v configu). Bez povolení nebo bez připojeného mikrofonu se nahraje jen `audio.m4a`.
+- Ztlumení si uživatel řeší tlačítkem na mikrofonu, appka stav ztlumení v meetingu neřeší.
 - Jen audio procesů meeting appky přes Core Audio process tap podle bundle ID (macOS 26+, `processRestoreEnabled`), ne celý systém. Brave: tap zachytí i jiné záložky, jednu záložku oddělit nejde.
-- Formát: mono AAC `.m4a`, ~32 kbps.
+- Formát: mono AAC `.m4a`, ~32 kbps, obě stopy.
 
 **Obraz**
 - Jen okno meetingu (`SCContentFilter(desktopIndependentWindow:)`). Funguje i zakryté, minimalizované ne → notifikace.
@@ -50,7 +51,7 @@ docs/       rozhodnutí a poznámky
 **Přepis a AI**
 - Jazyky: čeština (kolegové), slovenština (zákazníci), ~10 % angličtina. Střídání mluvčích, hovorová řeč, anglicismy. Přepis v původním jazyce, poznámky česky.
 - `mlx-whisper` s modelem large-v3-turbo, auto-detekce jazyka. Slovník: krátký výběr do `initial_prompt`, celý slovník do Claude čištění.
-- Mluvčí: diarizace → Claude přiřadí jména podle účastníků z kalendáře a kontextu, nejistá označí „(?)“.
+- Mluvčí: `mic.m4a` je vždy uživatel (`userName`). Diarizace jen na `audio.m4a` → Claude přiřadí jména podle účastníků z kalendáře a kontextu, nejistá označí „(?)“.
 - LLM výhradně Claude Code headless přes Team předplatné uživatele. Žádný API klíč, žádné jiné cloudové služby. Pipeline z env pro volání `claude` odstraní `ANTHROPIC_API_KEY`.
 - Zpracování hned po meetingu na pozadí. Musí nechat prostor pro VS Code + 1 Docker kontejner. Poznámka může být klidně až druhý den.
 
@@ -81,6 +82,6 @@ docs/       rozhodnutí a poznámky
 - Na začátku kroku navrhni plán a počkej na schválení.
 - Nové závislosti (SPM, PyPI, Homebrew) jen po odsouhlasení, preferuj systémové frameworky.
 - Apple API ověřuj v dokumentaci (Xcode MCP `DocumentationSearch`), neodhaduj z paměti. ScreenCaptureKit a Core Audio taps se mezi verzemi macOS mění.
-- Každé oprávnění (Screen Recording, Notifikace, Kalendář) má ošetřený stav „nepovoleno“ a UI říká, co má uživatel udělat.
+- Každé oprávnění (Nahrávání obrazovky a systémového zvuku, Mikrofon, Notifikace, Kalendář) má ošetřený stav „nepovoleno“ a UI říká, co má uživatel udělat.
 - Nahrávky, přepisy a poznámky nikdy necommitovat a obsah přepisů nelogovat.
 - Krok je hotový, až když build i testy projdou a uživatel dostal přesný postup ručního testu.

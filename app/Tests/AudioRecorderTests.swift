@@ -37,8 +37,9 @@ private nonisolated final class TonePlayer: @unchecked Sendable {
 }
 
 /// Integration test on real Core Audio: the test process taps its own tone (muted, so nothing is
-/// heard). Verifies the tap, the aggregate device without a microphone and the AAC file.
-struct AudioTapRecorderTests {
+/// heard). Verifies the tap, the aggregate device and the AAC file. The microphone is left out on
+/// purpose: a test must not record the user's voice.
+struct AudioRecorderTests {
     @Test(.timeLimit(.minutes(1)))
     func tapRecordsOwnProcessAudio() async throws {
         let player = TonePlayer()
@@ -48,7 +49,8 @@ struct AudioTapRecorderTests {
 
         let url = FileManager.default.temporaryDirectory.appending(path: "tap-\(UUID().uuidString).m4a")
         let bundleID = try #require(Bundle.main.bundleIdentifier)
-        let recorder = AudioTapRecorder(bundleIDs: [bundleID], fileURL: url, bitRate: 32_000, muteBehavior: .muted)
+        let recorder = AudioRecorder(
+            bundleIDs: [bundleID], appFileURL: url, microphone: nil, bitRate: 32_000, muteBehavior: .muted)
         try recorder.start()
         try await Task.sleep(for: .seconds(3))
         let stats = recorder.currentStats
@@ -59,5 +61,34 @@ struct AudioTapRecorderTests {
         let duration = try await AVURLAsset(url: url).load(.duration).seconds
         #expect(duration > 2)
         try? FileManager.default.removeItem(at: url)
+    }
+}
+
+/// Mapping of the aggregate device's input streams to IOProc buffers.
+struct AudioStreamLayoutTests {
+    private let microphone: UInt32 = 0x6D69_6372  // "micr"
+
+    @Test func microphoneAndTapAsOnThisMac() {
+        let layout = AudioStreamLayout(streams: [
+            .init(terminalType: microphone, channels: 1, isNonInterleaved: false),
+            .init(terminalType: 0, channels: 1, isNonInterleaved: false),
+        ])
+        #expect(layout.microphoneStreamIndex == 0)
+        #expect(layout.tapStreamIndex == 1)
+        #expect(layout.bufferIndex(ofStream: 1) == 1)
+    }
+
+    @Test func nonInterleavedStereoMicrophoneTakesTwoBuffers() {
+        let layout = AudioStreamLayout(streams: [
+            .init(terminalType: microphone, channels: 2, isNonInterleaved: true),
+            .init(terminalType: 0, channels: 1, isNonInterleaved: false),
+        ])
+        #expect(layout.bufferIndex(ofStream: layout.tapStreamIndex!) == 2)
+    }
+
+    @Test func tapOnly() {
+        let layout = AudioStreamLayout(streams: [.init(terminalType: 0, channels: 1, isNonInterleaved: false)])
+        #expect(layout.tapStreamIndex == 0)
+        #expect(layout.microphoneStreamIndex == nil)
     }
 }

@@ -1,3 +1,4 @@
+import AVFAudio
 import AppKit
 import EventKit
 import SwiftUI
@@ -25,6 +26,7 @@ struct MenuContent: View {
         }
         sessionActions
         shortRecordingActions
+        processingSection
 
         if !model.isRecording {
             Divider()
@@ -70,6 +72,9 @@ struct MenuContent: View {
         case .recording(let session):
             if let recording = model.recording {
                 Text(recording.audioStatusText)
+                if let microphoneText = recording.microphoneStatusText {
+                    Text(microphoneText)
+                }
                 Text(recording.framesStatusText)
                 Divider()
                 Button("Ukončit nahrávání") { model.stopRecording(session.id) }
@@ -105,6 +110,38 @@ struct MenuContent: View {
     }
 
     @ViewBuilder
+    private var processingSection: some View {
+        let pipeline = model.pipeline
+        if let current = pipeline.current {
+            Divider()
+            Text("Zpracovávám: \(pipeline.currentStatus?.message ?? "startuji")")
+            Text("   \(current.lastPathComponent)" + (pipeline.queue.isEmpty ? "" : " · ve frontě další: \(pipeline.queue.count)"))
+        } else if let status = pipeline.lastStatus, let folder = pipeline.lastFolder {
+            Divider()
+            switch status.state {
+            case .done:
+                Text("Poslední poznámka je hotová")
+                if let warning = status.error {
+                    Text("⚠️ \(warning)")
+                }
+            case .needsSummary:
+                Text("⚠️ Poslední poznámka jen s přepisem (Claude nebyl dostupný)")
+            default:
+                Text("⚠️ Zpracování selhalo: \(status.error ?? "neznámá chyba")")
+                Button("Otevřít log zpracování") {
+                    NSWorkspace.shared.open(folder.appending(path: PipelineRunner.logFileName))
+                }
+            }
+            if let notePath = pipeline.lastNotePath {
+                Button("Otevřít poznámku") { model.openNote(notePath) }
+            }
+            if status.state != .done {
+                Button("Zkusit znovu") { model.retryLastProcessing() }
+            }
+        }
+    }
+
+    @ViewBuilder
     private var permissionWarnings: some View {
         if !model.screenRecordingGranted {
             Divider()
@@ -132,6 +169,12 @@ struct MenuContent: View {
                 Text("Tip: styl notifikací „Upozornění“ nezmizí, dokud nevybereš Ano / Ne.")
                 Button("Otevřít nastavení notifikací…") { SystemSettingsLink.openNotifications() }
             }
+        }
+
+        if !model.config.microphoneName.isEmpty && model.microphoneStatus == .denied {
+            Divider()
+            Text("⚠️ Mikrofon není povolený: nahraje se jen zvuk meetingu, bez tvého hlasu.")
+            Button("Otevřít nastavení mikrofonu…") { SystemSettingsLink.openMicrophone() }
         }
 
         switch model.calendarStatus {
@@ -212,6 +255,16 @@ extension RecordingController {
             return "⚠️ Zvuk: jen ticho, zkontroluj oprávnění Systémový zvuk"
         }
         return hasAudioSignal ? "Zvuk: nahrává se ✓" : "Zvuk: zatím ticho"
+    }
+
+    /// Nil when the microphone is switched off in config.json.
+    var microphoneStatusText: String? {
+        guard let microphone = meta.microphone else { return nil }
+        if let error = microphone.error {
+            return "⚠️ Mikrofon: \(error)"
+        }
+        let device = microphone.device ?? "mikrofon"
+        return hasMicSignal ? "Mikrofon: \(device) · mluvíš ✓" : "Mikrofon: \(device) · ticho"
     }
 
     var framesStatusText: String {

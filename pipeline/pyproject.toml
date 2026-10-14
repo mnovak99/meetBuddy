@@ -3,7 +3,11 @@ name = "meeting-pipeline"
 version = "0.1.0"
 description = "Meeting Assistant pipeline: transcription, diarization, summary and Obsidian note."
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "mlx-whisper>=0.4.3",
+    "numpy>=2.5.4",
+    "pyannote-audio>=4.0",
+]
 
 [project.scripts]
 meeting-pipeline = "meeting_pipeline.cli:main"
@@ -27,3 +31,6 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Slow tests need the real models and the Hugging Face token: `uv run pytest -m slow -s`.
+addopts = "-m 'not slow'"
+markers = ["slow: end-to-end run with the real models (Whisper, pyannote)"]

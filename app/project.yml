@@ -35,7 +35,7 @@ targets:
       properties:
         CFBundleName: MeetingAssistant
         CFBundleDisplayName: Meeting Assistant
-        CFBundleShortVersionString: "0.2.0"
+        CFBundleShortVersionString: "0.3.0"
         CFBundleVersion: "1"
         CFBundleDevelopmentRegion: cs
         LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
@@ -46,10 +46,11 @@ targets:
         # Not guaranteed for UserNotifications; the user can switch it in System Settings.
         NSUserNotificationAlertStyle: alert
         # Core Audio process tap: system prompt "Nahrávání systémového zvuku" on the first recording.
-        NSAudioCaptureUsageDescription: "Meeting Assistant nahrává zvuk meeting aplikace (Teams, Google Meet, Discord) kvůli přepisu. Mikrofon nikdy nepoužívá."
+        NSAudioCaptureUsageDescription: "Meeting Assistant nahrává zvuk meeting aplikace (Teams, Google Meet, Discord) kvůli přepisu."
         # EventKit: title and participants of the current meeting.
         NSCalendarsFullAccessUsageDescription: "Meeting Assistant čte z Kalendáře název a účastníky právě probíhajícího meetingu."
-        # Deliberately no NSMicrophoneUsageDescription: the app must never access the microphone.
+        # The user's voice is recorded into mic.m4a (fixed device, microphoneName in config.json).
+        NSMicrophoneUsageDescription: "Meeting Assistant nahrává tvůj hlas z mikrofonu (Arctis) do samostatné stopy, aby přepis věděl, co jsi řekl ty."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.matej.MeetingAssistant

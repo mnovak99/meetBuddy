@@ -1,9 +1,10 @@
+import AVFAudio
 import AppKit
 import CoreGraphics
 
 /// Screen Recording permission (TCC service "ScreenCapture", in System Settings called
 /// "Nahrávání obrazovky a systémového zvuku"). Needed for window titles now and for capturing the
-/// meeting window in step 2. The app never asks for the microphone.
+/// meeting window.
 enum ScreenRecordingPermission {
     /// Current state. A permission granted while the app runs only takes effect after a restart.
     static var isGranted: Bool {
@@ -18,7 +19,27 @@ enum ScreenRecordingPermission {
     }
 }
 
+/// Microphone permission (TCC "Microphone"): the user's voice is recorded into mic.m4a.
+enum MicrophonePermission {
+    static var status: AVAudioApplication.recordPermission {
+        AVAudioApplication.shared.recordPermission
+    }
+
+    static var isGranted: Bool {
+        status == .granted
+    }
+
+    /// Shows the system prompt the first time; later returns the stored answer.
+    static func request() async -> Bool {
+        await AVAudioApplication.requestRecordPermission()
+    }
+}
+
 enum SystemSettingsLink {
+    static func openMicrophone() {
+        open("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
+    }
+
     static func openScreenRecording() {
         open("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
     }

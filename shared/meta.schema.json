@@ -4,39 +4,137 @@
   "title": "Meeting Assistant recording metadata",
   "description": "recordings/<YYYY-MM-DD_HHmm>_<slug>/meta.json. Written by the Swift app at the start, after every saved frame and at the end. Dates are ISO 8601 with a UTC offset.",
   "type": "object",
-  "required": ["schemaVersion", "id", "source", "appBundleID", "manual", "startedAt", "audio", "frames", "appVersion"],
+  "required": [
+    "schemaVersion",
+    "id",
+    "source",
+    "appBundleID",
+    "manual",
+    "startedAt",
+    "audio",
+    "frames",
+    "appVersion"
+  ],
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 1 },
-    "id": { "description": "UUID of the recording (same as the detected meeting session).", "type": "string" },
-    "source": { "enum": ["teams", "meet", "discord"] },
-    "appBundleID": { "type": "string" },
-    "manual": { "description": "Started from the menu (\"Nahrávat ručně\"), not by a detection.", "type": "boolean" },
-    "startedAt": { "type": "string", "format": "date-time" },
-    "endedAt": { "description": "Missing while recording (or after a crash until the next launch).", "type": "string", "format": "date-time" },
-    "durationSeconds": { "type": "number" },
-    "endReason": { "enum": ["user", "powerOff", "appQuit", "recovered"] },
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "description": "UUID of the recording (same as the detected meeting session).",
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "teams",
+        "meet",
+        "discord"
+      ]
+    },
+    "appBundleID": {
+      "type": "string"
+    },
+    "manual": {
+      "description": "Started from the menu (\"Nahrávat ručně\"), not by a detection.",
+      "type": "boolean"
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "endedAt": {
+      "description": "Missing while recording (or after a crash until the next launch).",
+      "type": "string",
+      "format": "date-time"
+    },
+    "durationSeconds": {
+      "type": "number"
+    },
+    "endReason": {
+      "enum": [
+        "user",
+        "powerOff",
+        "appQuit",
+        "recovered"
+      ]
+    },
     "window": {
       "description": "The window frames were taken from.",
       "type": "object",
-      "required": ["id"],
+      "required": [
+        "id"
+      ],
       "properties": {
-        "id": { "type": "integer" },
-        "title": { "type": "string" }
+        "id": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        }
       }
     },
     "audio": {
       "type": "object",
-      "required": ["file", "codec", "channels", "bitRate", "scope", "tappedBundleIDs", "silenceSuspected"],
+      "required": [
+        "file",
+        "codec",
+        "channels",
+        "bitRate",
+        "scope",
+        "tappedBundleIDs",
+        "silenceSuspected"
+      ],
       "properties": {
-        "file": { "type": "string", "const": "audio.m4a" },
-        "codec": { "type": "string", "const": "aac" },
-        "channels": { "type": "integer" },
-        "bitRate": { "type": "integer" },
-        "sampleRate": { "type": "number" },
-        "scope": { "description": "\"app\": all audio of the meeting app (for Brave including other tabs).", "type": "string" },
-        "tappedBundleIDs": { "type": "array", "items": { "type": "string" } },
-        "silenceSuspected": { "description": "The recording stayed silent while the app was playing (missing permission?).", "type": "boolean" },
-        "error": { "type": "string" }
+        "file": {
+          "type": "string",
+          "const": "audio.m4a"
+        },
+        "codec": {
+          "type": "string",
+          "const": "aac"
+        },
+        "channels": {
+          "type": "integer"
+        },
+        "bitRate": {
+          "type": "integer"
+        },
+        "sampleRate": {
+          "type": "number"
+        },
+        "scope": {
+          "description": "\"app\": all audio of the meeting app (for Brave including other tabs).",
+          "type": "string"
+        },
+        "tappedBundleIDs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "silenceSuspected": {
+          "description": "The recording stayed silent while the app was playing (missing permission?).",
+          "type": "boolean"
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    },
+    "microphone": {
+      "description": "The user's own voice (mic.m4a), sample-aligned with audio.m4a. Missing when the microphone is switched off in config.json.",
+      "type": "object",
+      "properties": {
+        "file": {
+          "description": "\"mic.m4a\"; missing when the microphone could not be recorded (see error).",
+          "type": "string"
+        },
+        "device": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        }
       }
     },
     "frames": {
@@ -44,38 +142,82 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["file", "capturedAt", "offsetSeconds"],
+        "required": [
+          "file",
+          "capturedAt",
+          "offsetSeconds"
+        ],
         "properties": {
-          "file": { "description": "Relative to the recording folder.", "type": "string" },
-          "capturedAt": { "type": "string", "format": "date-time" },
-          "offsetSeconds": { "description": "Seconds since startedAt (position in audio.m4a).", "type": "number" }
+          "file": {
+            "description": "Relative to the recording folder.",
+            "type": "string"
+          },
+          "capturedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "offsetSeconds": {
+            "description": "Seconds since startedAt (position in audio.m4a).",
+            "type": "number"
+          }
         }
       }
     },
     "calendar": {
       "description": "The calendar event the meeting most likely belongs to.",
       "type": "object",
-      "required": ["title", "start", "end", "attendees"],
+      "required": [
+        "title",
+        "start",
+        "end",
+        "attendees"
+      ],
       "properties": {
-        "title": { "type": "string" },
-        "start": { "type": "string", "format": "date-time" },
-        "end": { "type": "string", "format": "date-time" },
-        "organizer": { "type": "string" },
+        "title": {
+          "type": "string"
+        },
+        "start": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "end": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "organizer": {
+          "type": "string"
+        },
         "attendees": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["status"],
+            "required": [
+              "status"
+            ],
             "properties": {
-              "name": { "type": "string" },
-              "email": { "type": "string" },
-              "status": { "enum": ["accepted", "declined", "tentative", "pending", "unknown"] }
+              "name": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "accepted",
+                  "declined",
+                  "tentative",
+                  "pending",
+                  "unknown"
+                ]
+              }
             }
           }
         }
       }
     },
-    "appVersion": { "type": "string" }
+    "appVersion": {
+      "type": "string"
+    }
   },
   "additionalProperties": true
 }

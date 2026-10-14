@@ -13,6 +13,8 @@ final class NotificationManager: NSObject {
 
     /// Called on the main thread when the user picks an action in one of our notifications.
     var onChoice: ((Choice, UUID) -> Void)?
+    /// Called when the user clicks a "note ready" notification (absolute path of the note).
+    var onOpenNote: ((String) -> Void)?
 
     private let center = UNUserNotificationCenter.current()
 
@@ -28,6 +30,7 @@ final class NotificationManager: NSObject {
         static let discard = "DISCARD"
         static let keepShort = "KEEP_SHORT"
         static let sessionKey = "sessionID"
+        static let notePathKey = "notePath"
     }
 
     /// Call early at launch: the delegate must be set before the app finishes launching,
@@ -131,6 +134,32 @@ final class NotificationManager: NSObject {
         post(content, identifier: identifier)
     }
 
+    /// The pipeline finished a recording: note ready, note without summary, or failure.
+    func postPipelineFinished(folderName: String, status: PipelineStatus?, notePath: String?) {
+        let content = UNMutableNotificationContent()
+        let noteName = notePath.map { URL(filePath: $0).deletingPathExtension().lastPathComponent }
+        switch status?.state {
+        case .done:
+            content.title = "Poznámka je hotová"
+            content.body = "\(noteName ?? folderName) – kliknutím ji otevřeš v Obsidianu."
+            if let warning = status?.error {
+                content.body += " ⚠️ \(warning)"
+            }
+        case .needsSummary:
+            content.title = "Poznámka zatím jen s přepisem"
+            content.body = "Claude nebyl dostupný. Shrnutí doplním při příštím spuštění appky "
+                + "nebo po „Zkusit znovu“ v menu."
+        default:
+            content.title = "Zpracování nahrávky selhalo"
+            content.body = status?.error ?? "Neznámá chyba, podrobnosti v pipeline.log."
+        }
+        content.sound = .default
+        if let notePath {
+            content.userInfo = [ID.notePathKey: notePath]
+        }
+        post(content, identifier: "pipeline-\(folderName)")
+    }
+
     /// Removes notifications of a meeting that is over, so nobody answers a stale question.
     func removeNotifications(for sessionID: UUID) {
         let ids = [Self.detectedIdentifier(sessionID), Self.endedIdentifier(sessionID), "short-\(sessionID.uuidString)"]
@@ -156,7 +185,11 @@ final class NotificationManager: NSObject {
         }
     }
 
-    private func handle(actionIdentifier: String, sessionIDString: String?) {
+    private func handle(actionIdentifier: String, sessionIDString: String?, notePath: String?) {
+        if let notePath, actionIdentifier == UNNotificationDefaultActionIdentifier {
+            onOpenNote?(notePath)
+            return
+        }
         guard let sessionIDString, let sessionID = UUID(uuidString: sessionIDString) else { return }
         let choice: Choice
         switch actionIdentifier {
@@ -186,9 +219,11 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
     ) async {
         let action = response.actionIdentifier
-        let sessionID = response.notification.request.content.userInfo[ID.sessionKey] as? String
+        let userInfo = response.notification.request.content.userInfo
+        let sessionID = userInfo[ID.sessionKey] as? String
+        let notePath = userInfo[ID.notePathKey] as? String
         await MainActor.run {
-            self.handle(actionIdentifier: action, sessionIDString: sessionID)
+            self.handle(actionIdentifier: action, sessionIDString: sessionID, notePath: notePath)
         }
     }
 
