@@ -192,7 +192,13 @@ struct MenuContent: View {
             }
         }
 
-        if !model.config.microphoneName.isEmpty && model.microphoneStatus == .denied {
+        if model.config.obsidianVaultPath.isEmpty {
+            Divider()
+            Text("⚠️ Není vybraný Obsidian vault, poznámky nevzniknou.")
+            Button("Vybrat v Nastavení…") { open(.settings) }
+        }
+
+        if model.config.recordMicrophone && model.microphoneStatus == .denied {
             Divider()
             Text("⚠️ Mikrofon není povolený: nahraje se jen zvuk meetingu, bez tvého hlasu.")
             Button("Otevřít nastavení mikrofonu…") { SystemSettingsLink.openMicrophone() }

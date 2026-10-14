@@ -65,4 +65,32 @@ struct AppConfigTests {
         // The broken file is left for the user to fix, never overwritten.
         #expect(try String(contentsOf: url, encoding: .utf8) == "{ not json")
     }
+
+    // MARK: Empty settings are filled in automatically
+
+    @Test func emptyNameComesFromTheMacAccount() {
+        #expect(!AppConfig().effectiveUserName.isEmpty)
+        var config = AppConfig()
+        config.userName = "Matej"
+        #expect(config.effectiveUserName == "Matej")
+    }
+
+    @Test func uvIsFoundInTheUsualPlaces() {
+        let config = AppConfig()
+        let found = config.resolvedUVPath(fileExists: { $0 == "/opt/homebrew/bin/uv" })
+        #expect(found == "/opt/homebrew/bin/uv")
+        var configured = AppConfig()
+        configured.uvPath = "~/bin/uv"
+        #expect(configured.resolvedUVPath(fileExists: { _ in false }).hasSuffix("/bin/uv"))
+        #expect(!configured.resolvedUVPath().contains("~"))
+    }
+
+    @Test func pipelineDefaultsToTheRepositoryTheAppWasBuiltFrom() {
+        // The test host is the app built from this repository: app/../pipeline.
+        let path = AppConfig().resolvedPipelinePath()
+        #expect(path.hasSuffix("/pipeline"))
+        #expect(!path.contains(".."))
+        #expect(FileManager.default.fileExists(atPath: path + "/pyproject.toml"))
+    }
 }
+

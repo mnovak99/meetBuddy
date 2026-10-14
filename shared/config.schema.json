@@ -12,9 +12,9 @@
       "default": 1
     },
     "userName": {
-      "description": "The user's name as colleagues say it. Used to find tasks assigned to him.",
+      "description": "Your name as colleagues say it (finds your tasks and mentions). Empty = the first name of the macOS account.",
       "type": "string",
-      "default": "Matej"
+      "default": ""
     },
     "pollIntervalSeconds": {
       "description": "How often the detector checks running apps, windows and audio.",
@@ -98,20 +98,25 @@
       "type": "string",
       "default": ""
     },
+    "recordMicrophone": {
+      "description": "Record your microphone into mic.m4a (a separate track, aligned with the meeting audio).",
+      "type": "boolean",
+      "default": true
+    },
     "microphoneName": {
-      "description": "Microphone recorded into mic.m4a (the user's voice): the first input device whose name contains this text. Empty = do not record the microphone.",
+      "description": "Microphone recorded into mic.m4a: the first input device whose name contains this text. Empty = the system's default input.",
       "type": "string",
-      "default": "Arctis Nova 7"
+      "default": ""
     },
     "pipelinePath": {
-      "description": "The Python pipeline project folder; `~` is expanded.",
+      "description": "The Python pipeline project folder; `~` is expanded. Empty = the pipeline folder of the repository the app was built from.",
       "type": "string",
-      "default": "~/Work/meetHelper/pipeline"
+      "default": ""
     },
     "uvPath": {
-      "description": "Full path of the uv executable (GUI apps do not see the shell PATH); `~` is expanded.",
+      "description": "Full path of the uv executable (GUI apps do not see the shell PATH); `~` is expanded. Empty = found in ~/.local/bin, ~/.cargo/bin, /opt/homebrew/bin or /usr/local/bin.",
       "type": "string",
-      "default": "~/.local/bin/uv"
+      "default": ""
     }
   },
   "additionalProperties": true

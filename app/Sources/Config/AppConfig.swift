@@ -6,7 +6,8 @@ import Foundation
 /// Every key is optional in the file; a missing key keeps the default value below.
 nonisolated struct AppConfig: Equatable, Sendable {
     var schemaVersion = 1
-    var userName = "Matej"
+    /// Empty = the first name of the macOS account (see `effectiveUserName`).
+    var userName = ""
     var pollIntervalSeconds: Double = 3
     var detectionConfirmSeconds: Double = 9
     var endSilenceMinutes: Double = 3
@@ -19,13 +20,15 @@ nonisolated struct AppConfig: Equatable, Sendable {
     var audioRetentionDays = 7
     var storageLimitGB: Double = 10
     var obsidianVaultPath = ""
-    /// Microphone recorded into mic.m4a: the first input device whose name contains this text.
-    /// Empty = do not record the microphone.
-    var microphoneName = "Arctis Nova 7"
+    /// Record the user's microphone into mic.m4a.
+    var recordMicrophone = true
+    /// The first input device whose name contains this text; empty = the system's default input.
+    var microphoneName = ""
     /// The Python pipeline project (`uv run --project <pipelinePath> meeting-pipeline`).
-    var pipelinePath = "~/Work/meetHelper/pipeline"
-    /// uv executable; GUI apps do not see the shell PATH, so the full path is needed.
-    var uvPath = "~/.local/bin/uv"
+    /// Empty = the pipeline folder of the repository the app was built from.
+    var pipelinePath = ""
+    /// uv executable (GUI apps do not see the shell PATH). Empty = found in the usual places.
+    var uvPath = ""
 
     /// Values outside the ranges allowed by the schema are clamped, so a typo cannot break detection.
     func sanitized() -> AppConfig {
@@ -44,7 +47,7 @@ nonisolated extension AppConfig: Codable {
     enum CodingKeys: String, CodingKey {
         case schemaVersion, userName, pollIntervalSeconds, detectionConfirmSeconds, endSilenceMinutes
         case enabledSources, minDurationMinutes, frameIntervalSeconds, frameMaxDimension, frameChangeThreshold
-        case audioRetentionDays, storageLimitGB, obsidianVaultPath, microphoneName, pipelinePath, uvPath
+        case audioRetentionDays, storageLimitGB, obsidianVaultPath, recordMicrophone, microphoneName, pipelinePath, uvPath
     }
 
     /// Custom decoding: take each key only if it is present, otherwise keep the default.
@@ -77,6 +80,7 @@ nonisolated extension AppConfig: Codable {
         storageLimitGB = try c.decodeIfPresent(Double.self, forKey: .storageLimitGB) ?? storageLimitGB
         obsidianVaultPath = try c.decodeIfPresent(String.self, forKey: .obsidianVaultPath)
             ?? obsidianVaultPath
+        recordMicrophone = try c.decodeIfPresent(Bool.self, forKey: .recordMicrophone) ?? recordMicrophone
         microphoneName = try c.decodeIfPresent(String.self, forKey: .microphoneName) ?? microphoneName
         pipelinePath = try c.decodeIfPresent(String.self, forKey: .pipelinePath) ?? pipelinePath
         uvPath = try c.decodeIfPresent(String.self, forKey: .uvPath) ?? uvPath
@@ -86,5 +90,34 @@ nonisolated extension AppConfig: Codable {
 nonisolated private extension Double {
     func clamped(to range: ClosedRange<Double>) -> Double {
         Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
+    }
+}
+
+/// Values that fill in empty settings, so the app works without editing config.json.
+nonisolated extension AppConfig {
+    /// The configured name, or the first name of the macOS account.
+    var effectiveUserName: String {
+        guard userName.isEmpty else { return userName }
+        return NSFullUserName().split(separator: " ").first.map(String.init) ?? NSUserName()
+    }
+
+    /// The configured pipeline folder, or the one recorded at build time (Info.plist
+    /// `MBPipelinePath` = `<repository>/pipeline`).
+    func resolvedPipelinePath(bundle: Bundle = .main) -> String {
+        if !pipelinePath.isEmpty {
+            return (pipelinePath as NSString).expandingTildeInPath
+        }
+        let built = bundle.object(forInfoDictionaryKey: "MBPipelinePath") as? String ?? ""
+        return URL(filePath: built).standardizedFileURL.path(percentEncoded: false)
+    }
+
+    /// The configured uv, or the first one found where uv's installers put it.
+    func resolvedUVPath(fileExists: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }) -> String {
+        if !uvPath.isEmpty {
+            return (uvPath as NSString).expandingTildeInPath
+        }
+        let candidates = ["~/.local/bin/uv", "~/.cargo/bin/uv", "/opt/homebrew/bin/uv", "/usr/local/bin/uv"]
+            .map { ($0 as NSString).expandingTildeInPath }
+        return candidates.first(where: fileExists) ?? candidates[0]
     }
 }

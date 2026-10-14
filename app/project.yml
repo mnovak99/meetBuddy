@@ -43,6 +43,8 @@ targets:
         LSApplicationCategoryType: public.app-category.productivity
         # Menu bar only: no Dock icon, no main menu.
         LSUIElement: true
+        # The repository's pipeline folder, used when pipelinePath in config.json is empty.
+        MBPipelinePath: "$(SRCROOT)/../pipeline"
         # Ask macOS to show notifications as persistent alerts instead of banners.
         # Not guaranteed for UserNotifications; the user can switch it in System Settings.
         NSUserNotificationAlertStyle: alert
@@ -51,7 +53,7 @@ targets:
         # EventKit: title and participants of the current meeting.
         NSCalendarsFullAccessUsageDescription: "Meeting Buddy čte z Kalendáře název a účastníky právě probíhajícího meetingu."
         # The user's voice is recorded into mic.m4a (fixed device, microphoneName in config.json).
-        NSMicrophoneUsageDescription: "Meeting Buddy nahrává tvůj hlas z mikrofonu (Arctis) do samostatné stopy, aby přepis věděl, co jsi řekl ty."
+        NSMicrophoneUsageDescription: "Meeting Buddy nahrává tvůj hlas z mikrofonu do samostatné stopy, aby přepis věděl, co jsi řekl ty."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.matej.MeetingAssistant

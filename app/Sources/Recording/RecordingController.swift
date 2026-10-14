@@ -59,7 +59,7 @@ final class RecordingController {
             appVersion: version
         )
         meta = initialMeta
-        let microphone = config.microphoneName.isEmpty ? nil : AudioRecorder.MicrophoneRequest(
+        let microphone = !config.recordMicrophone ? nil : AudioRecorder.MicrophoneRequest(
             deviceName: config.microphoneName, fileURL: folder.appending(path: Self.micFile),
             isAuthorized: microphoneAuthorized)
         audio = AudioRecorder(
@@ -137,7 +137,7 @@ final class RecordingController {
     private func startAudio() {
         do {
             try audio.start()
-            if !config.microphoneName.isEmpty {
+            if config.recordMicrophone {
                 let recorded = audio.microphoneDeviceName != nil
                 meta.microphone = RecordingMeta.Microphone(
                     file: recorded ? Self.micFile : nil, device: audio.microphoneDeviceName,

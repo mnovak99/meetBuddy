@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "userName": "Matej",
+  "userName": "",
   "pollIntervalSeconds": 3,
   "detectionConfirmSeconds": 9,
   "endSilenceMinutes": 3,
@@ -16,7 +16,8 @@
   "audioRetentionDays": 7,
   "storageLimitGB": 10,
   "obsidianVaultPath": "",
-  "microphoneName": "Arctis Nova 7",
-  "pipelinePath": "~/Work/meetHelper/pipeline",
-  "uvPath": "~/.local/bin/uv"
+  "recordMicrophone": true,
+  "microphoneName": "",
+  "pipelinePath": "",
+  "uvPath": ""
 }

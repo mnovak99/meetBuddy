@@ -100,7 +100,7 @@ final class AppModel {
                 await calendar.requestAccess()
             }
             calendarStatus = calendar.status
-            if !config.microphoneName.isEmpty && MicrophonePermission.status == .undetermined {
+            if config.recordMicrophone && MicrophonePermission.status == .undetermined {
                 let granted = await MicrophonePermission.request()
                 Log.permissions.info("Microphone permission granted: \(granted)")
             }

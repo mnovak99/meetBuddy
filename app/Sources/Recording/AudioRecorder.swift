@@ -41,7 +41,7 @@ nonisolated final class AudioRecorder: @unchecked Sendable {
 
     /// What should be recorded from the microphone.
     struct MicrophoneRequest: Sendable {
-        /// The first input device whose name contains this text is used.
+        /// The first input device whose name contains this text; empty = the system's default input.
         var deviceName: String
         var fileURL: URL
         /// Microphone permission granted (checked by the caller on the main thread).
@@ -240,10 +240,18 @@ nonisolated final class AudioRecorder: @unchecked Sendable {
 
     /// The configured microphone, or nil (with `microphoneProblem` set) when it cannot be used.
     private func microphoneDevice(_ system: AudioHardwareSystem) throws -> AudioHardwareDevice? {
-        guard let microphone, !microphone.deviceName.isEmpty else { return nil }
+        guard let microphone else { return nil }
         guard microphone.isAuthorized else {
             microphoneProblem = "Appka nemá povolený mikrofon."
             return nil
+        }
+        if microphone.deviceName.isEmpty {
+            guard let device = try system.defaultInputDevice else {
+                microphoneProblem = "Mac nemá žádný mikrofon."
+                return nil
+            }
+            microphoneDeviceName = try? device.name
+            return device
         }
         let device = try system.devices.first { device in
             let name = (try? device.name) ?? ""

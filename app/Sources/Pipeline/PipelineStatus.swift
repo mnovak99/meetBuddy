@@ -88,8 +88,8 @@ nonisolated enum PipelineCommand {
     /// when nothing more important (VS Code, Docker, the meeting itself) needs them.
     /// `force`: start over, forgetting transcript, names and summary (e.g. after vocabulary changes).
     static func make(folder: URL, config: AppConfig, environment: [String: String], force: Bool = false) -> Invocation {
-        let uv = (config.uvPath as NSString).expandingTildeInPath
-        let project = (config.pipelinePath as NSString).expandingTildeInPath
+        let uv = config.resolvedUVPath()
+        let project = config.resolvedPipelinePath()
         let home = environment["HOME"] ?? NSHomeDirectory()
 
         var env = environment

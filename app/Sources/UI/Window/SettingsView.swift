@@ -58,8 +58,8 @@ struct SettingsView: View {
 
     private var general: some View {
         Section("Obecné") {
-            TextField("Tvoje jméno", text: $draft.userName)
-                .help("Podle něj Claude pozná tvoje úkoly a zmínky o tobě")
+            TextField("Tvoje jméno", text: $draft.userName, prompt: Text(AppConfig().effectiveUserName))
+                .help("Podle něj Claude pozná tvoje úkoly a zmínky o tobě. Prázdné = jméno z účtu na Macu.")
             Toggle("Spouštět po přihlášení", isOn: Binding(
                 get: { loginStatus == .enabled || loginStatus == .requiresApproval },
                 set: { setLogin($0) }
@@ -85,12 +85,14 @@ struct SettingsView: View {
 
     private var recording: some View {
         Section("Nahrávání") {
-            Picker("Mikrofon (tvůj hlas)", selection: $draft.microphoneName) {
-                Text("Nenahrávat").tag("")
+            Toggle("Nahrávat můj mikrofon (samostatná stopa)", isOn: $draft.recordMicrophone)
+            Picker("Mikrofon", selection: $draft.microphoneName) {
+                Text("Výchozí vstup systému").tag("")
                 ForEach(microphoneChoices, id: \.self) { name in
                     Text(name).tag(name)
                 }
             }
+            .disabled(!draft.recordMicrophone)
             ForEach(MeetingSource.allCases, id: \.self) { source in
                 Toggle("Hlídat \(source.displayName)", isOn: Binding(
                     get: { draft.enabledSources.contains(source) },
@@ -199,8 +201,11 @@ struct SettingsView: View {
 
     private var advanced: some View {
         Section("Pokročilé") {
-            TextField("Složka pipeline", text: $draft.pipelinePath)
-            TextField("Cesta k uv", text: $draft.uvPath)
+            TextField("Složka pipeline", text: $draft.pipelinePath, prompt: Text(AppConfig().resolvedPipelinePath()))
+            TextField("Cesta k uv", text: $draft.uvPath, prompt: Text(AppConfig().resolvedUVPath()))
+            Text("Prázdné = zjistí se samo (pipeline z repa, ze kterého je appka sestavená).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Button("Otevřít složku s daty") { NSWorkspace.shared.open(AppPaths.supportDirectory) }
         }
     }

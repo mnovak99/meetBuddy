@@ -91,6 +91,15 @@ final class PipelineRunner {
     private func startNextIfIdle() {
         guard process == nil, !queue.isEmpty else { return }
         let folder = queue.removeFirst()
+        let pipelinePath = config.resolvedPipelinePath()
+        guard FileManager.default.fileExists(atPath: pipelinePath) else {
+            lastFolder = folder
+            lastStatus = PipelineStatus(
+                state: .failed, updatedAt: RecordingMetaStore.isoString(Date()),
+                error: "Složka pipeline nenalezena (\(pipelinePath)). Nastav ji v Nastavení → Pokročilé.")
+            onFinished?(folder, lastStatus)
+            return
+        }
         let invocation = PipelineCommand.make(
             folder: folder, config: config, environment: ProcessInfo.processInfo.environment,
             force: startOver.remove(folder) != nil)
