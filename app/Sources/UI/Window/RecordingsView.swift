@@ -1,28 +1,27 @@
 import AppKit
 import SwiftUI
 
-/// Nahrávky: recordings and their processing state, with actions. Placeholder list; the
-/// list + detail layout is built separately.
+/// Nahrávky: the list of recordings on the left, the selected one on the right.
+///
+/// The selection lives in the model (`selectedRecording`), so the menu bar panel and
+/// notifications can open a specific recording. Folder URLs are compared with
+/// `PipelineRunner.same`, because the same folder can arrive spelled differently.
 struct RecordingsView: View {
     let model: AppModel
 
+    @State private var search = ""
     @State private var toDelete: RecordingItem?
 
     var body: some View {
-        List(model.library.items) { item in
-            RecordingRow(item: item, isProcessing: model.pipeline.isProcessing(item.folder),
-                         progress: model.pipeline.isProcessing(item.folder) ? model.pipeline.currentStatus?.message : nil)
-                .contextMenu { actions(for: item) }
-                .padding(.vertical, 4)
-        }
-        .overlay {
-            if model.library.items.isEmpty {
-                ContentUnavailableView(
-                    "Zatím žádné nahrávky", systemImage: "waveform",
-                    description: Text("Nahrávky se objeví po prvním meetingu, který nahraješ."))
-            }
+        // HSplitView = AppKit's split view: the divider between the list and the detail is draggable.
+        HSplitView {
+            list
+                .frame(minWidth: 280, idealWidth: 320, maxWidth: 440)
+            detail
+                .frame(minWidth: 480, maxWidth: .infinity, maxHeight: .infinity)
         }
         .navigationTitle("Nahrávky")
+        .searchable(text: $search, placement: .toolbar, prompt: "Hledat podle názvu nebo data")
         .toolbar {
             ToolbarItem {
                 Button {
@@ -30,6 +29,7 @@ struct RecordingsView: View {
                 } label: {
                     Label("Obnovit", systemImage: "arrow.clockwise")
                 }
+                .help("Znovu načíst složku s nahrávkami")
             }
         }
         .confirmationDialog(
@@ -41,103 +41,96 @@ struct RecordingsView: View {
         } message: { item in
             Text("„\(item.title)“: zvuk, snímky a přepis. Poznámka v Obsidianu zůstane.")
         }
-        .onAppear { model.library.reload() }
+        .task {
+            model.library.reload()
+            ensureSelection()
+        }
+        .onChange(of: model.library.items.map(\.folder)) {
+            ensureSelection()
+        }
+        .onChange(of: model.selectedRecording) {
+            // Preselected from outside (panel, notification) before the library saw the folder.
+            if selectedItem == nil, model.selectedRecording != nil {
+                model.library.reload()
+                ensureSelection()
+            }
+        }
+    }
+
+    // MARK: - List
+
+    private var items: [RecordingItem] { model.library.items }
+
+    private var selectedItem: RecordingItem? {
+        guard let selected = model.selectedRecording else { return nil }
+        return items.first { PipelineRunner.same($0.folder, selected) }
+    }
+
+    /// The list's selection, mapped onto the folder URLs the library uses.
+    private var selection: Binding<URL?> {
+        Binding(
+            get: { selectedItem?.folder },
+            set: { folder in
+                if let folder {
+                    model.selectedRecording = folder
+                }
+            })
+    }
+
+    /// Title, folder name, date and app; case- and diacritic-insensitive.
+    private var filtered: [RecordingItem] {
+        let query = search.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return items }
+        return items.filter { item in
+            var haystack = [item.title, item.folder.lastPathComponent]
+            if let meta = item.meta {
+                haystack.append(RecordingTexts.dateTime(meta.startedAt))
+                haystack.append(RecordingTexts.longDate(meta.startedAt))
+                haystack.append(model.sourceName(meta.source))
+            }
+            return haystack.contains { $0.localizedStandardContains(query) }
+        }
+    }
+
+    private var list: some View {
+        List(selection: selection) {
+            ForEach(filtered) { item in
+                RecordingRow(item: item, pipeline: model.pipeline)
+                    .tag(item.folder)
+                    .contextMenu {
+                        RecordingActionMenu(model: model, item: item) { toDelete = item }
+                    }
+            }
+        }
+        .overlay {
+            if filtered.isEmpty {
+                if search.isEmpty {
+                    ContentUnavailableView(
+                        "Zatím žádné nahrávky", systemImage: "waveform",
+                        description: Text("Nahrávky se objeví po prvním meetingu, který nahraješ."))
+                } else {
+                    ContentUnavailableView.search(text: search)
+                }
+            }
+        }
     }
 
     @ViewBuilder
-    private func actions(for item: RecordingItem) -> some View {
-        if let note = item.note?.notePath {
-            Button("Otevřít poznámku") { model.openNote(note) }
-        }
-        Button("Otevřít složku") { NSWorkspace.shared.open(item.folder) }
-        Divider()
-        let busy = model.pipeline.isProcessing(item.folder) || model.pipeline.isQueued(item.folder)
-        Button("Zpracovat znovu") { model.reprocess(item, fromScratch: false) }
-            .disabled(busy || (!item.hasAudio && item.status?.state != .needsSummary))
-            .help("Pokračuje, kde se skončilo (např. chybějící shrnutí)")
-        Button("Přepsat znovu od začátku") { model.reprocess(item, fromScratch: true) }
-            .disabled(busy || !item.hasAudio)
-            .help("Nový přepis, mluvčí i shrnutí, třeba po úpravě slovníku")
-        Divider()
-        Button("Smazat…", role: .destructive) { toDelete = item }
-            .disabled(busy)
-    }
-}
-
-private struct RecordingRow: View {
-    let item: RecordingItem
-    let isProcessing: Bool
-    let progress: String?
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(.secondary)
-                .frame(width: 28)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(item.title).font(.headline)
-                Text(details).font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            badge
-        }
-    }
-
-    private var icon: String {
-        item.meta?.source.symbolName ?? "questionmark.folder"
-    }
-
-    private var details: String {
-        var parts: [String] = []
-        if let start = item.startedAt {
-            parts.append(start.formatted(date: .abbreviated, time: .shortened))
-        }
-        if let seconds = item.meta?.durationSeconds {
-            parts.append(Duration.seconds(Int(seconds)).formatted(.units(allowed: [.hours, .minutes], width: .abbreviated)))
-        }
-        if let source = item.meta?.source {
-            parts.append(source.displayName)
-        }
-        if item.meta?.microphone?.file != nil {
-            parts.append("s mikrofonem")
-        }
-        if let frames = item.meta?.frames.count, frames > 0 {
-            parts.append("\(frames) snímků")
-        }
-        if !item.hasAudio {
-            parts.append("audio smazáno")
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    @ViewBuilder
-    private var badge: some View {
-        if isProcessing {
-            HStack(spacing: 6) {
-                ProgressView().controlSize(.small)
-                Text(progress ?? "Zpracovává se").font(.caption)
-            }
+    private var detail: some View {
+        if let item = selectedItem {
+            RecordingDetailView(model: model, item: item) { toDelete = item }
         } else {
-            let (text, color) = statusLabel
-            Text(text)
-                .font(.caption.weight(.medium))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(color.opacity(0.15), in: Capsule())
-                .foregroundStyle(color)
-                .help(item.status?.error ?? "")
+            ContentUnavailableView(
+                "Vyber nahrávku", systemImage: "waveform",
+                description: Text(items.isEmpty
+                    ? "Nahrávky se objeví po prvním meetingu, který nahraješ."
+                    : "Vyber nahrávku v seznamu vlevo."))
         }
     }
 
-    private var statusLabel: (String, Color) {
-        switch item.status?.state {
-        case .done: item.status?.error == nil ? ("Hotovo", .green) : ("Hotovo, s varováním", .orange)
-        case .needsSummary: ("Jen přepis", .orange)
-        case .failed: ("Chyba", .red)
-        case .queued: ("Čeká", .secondary)
-        case .transcribing, .summarizing, .writing: ("Přerušeno", .secondary)
-        case nil: ("Nezpracováno", .secondary)
-        }
+    /// Nothing (or a vanished folder) selected: select the newest recording.
+    private func ensureSelection() {
+        guard selectedItem == nil, let first = items.first else { return }
+        model.selectedRecording = first.folder
     }
 }
