@@ -13,21 +13,24 @@ struct VocabularyView: View {
     @State private var editing: VocabularyTerm?
     @State private var editingSuggestion: VocabularySuggestion?
     @State private var confirmDelete = false
-    @State private var message: String?
+    @State private var notice: (tone: Tone, text: String)?
 
     var body: some View {
         let fit = store.promptFit
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Theme.spacing) {
             header(tokens: fit.tokens)
+            if let problem = store.problem {
+                Banner(tone: .error, title: "Slovník nejde načíst nebo uložit", message: problem)
+            }
+            if let notice {
+                Banner(tone: notice.tone, title: notice.text, actionTitle: "Zavřít") { self.notice = nil }
+            }
             if !store.suggestions.isEmpty {
-                suggestionsPanel
+                suggestionsCard
             }
             table(fitting: fit.fitting)
-            if let message = message ?? store.problem {
-                Text(message).font(.callout).foregroundStyle(.secondary)
-            }
         }
-        .padding(20)
+        .padding(Theme.padding)
         .navigationTitle("Slovník")
         .searchable(text: $search, prompt: "Hledat")
         .toolbar { toolbar }
@@ -59,7 +62,7 @@ struct VocabularyView: View {
         }
     }
 
-    // MARK: - Parts
+    // MARK: - Header
 
     private func header(tokens: Int) -> some View {
         HStack(alignment: .top, spacing: 24) {
@@ -67,43 +70,55 @@ struct VocabularyView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            VStack(alignment: .leading, spacing: 4) {
-                ProgressView(value: Double(min(tokens, VocabularyRules.promptTokenBudget)),
-                             total: Double(VocabularyRules.promptTokenBudget))
-                Text("Prompt Whisperu: ≈ \(tokens) / \(VocabularyRules.promptTokenBudget) tokenů")
+            ProgressView(
+                value: Double(min(tokens, VocabularyRules.promptTokenBudget)),
+                total: Double(VocabularyRules.promptTokenBudget)
+            ) {
+                Text("Prompt Whisperu").font(.caption.weight(.medium))
+            } currentValueLabel: {
+                Text("≈ \(tokens) / \(VocabularyRules.promptTokenBudget) tokenů")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
-            .frame(width: 230)
+            .tint(tokens > VocabularyRules.promptTokenBudget ? Theme.warning : .accentColor)
+            .frame(width: 220)
             .help("Whisper čte jen posledních 224 tokenů promptu. Pojmy, které se nevejdou, opraví jen Claude.")
         }
     }
 
-    private var suggestionsPanel: some View {
-        GroupBox {
+    // MARK: - Suggestions
+
+    private var suggestionsCard: some View {
+        Card(padding: 12) {
             VStack(alignment: .leading, spacing: 8) {
-                Label("Návrhy z meetingů (\(store.suggestions.count))", systemImage: "sparkles")
-                    .font(.headline)
+                HStack(spacing: 8) {
+                    IconCircle(symbolName: "sparkles", tone: .info, size: 26)
+                    Text("Návrhy z meetingů").font(.headline)
+                    StatusBadge(text: "\(store.suggestions.count)", tone: .info)
+                    Spacer()
+                }
                 Text("Pojmy, které Whisper nepoznal nebo napsal špatně. Přijmi je, uprav, nebo zamítni (zamítnuté se nevrátí).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 ScrollView {
-                    VStack(spacing: 6) {
+                    VStack(spacing: 0) {
                         ForEach(store.suggestions) { suggestion in
                             suggestionRow(suggestion)
-                            Divider()
+                            if suggestion.id != store.suggestions.last?.id {
+                                Divider()
+                            }
                         }
                     }
                 }
                 // As tall as the suggestions need, scrolling from four on.
-                .frame(height: min(CGFloat(store.suggestions.count) * 46, 170))
+                .frame(height: min(CGFloat(store.suggestions.count) * 48, 180))
             }
-            .padding(6)
         }
     }
 
     private func suggestionRow(_ suggestion: VocabularySuggestion) -> some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(suggestion.term).fontWeight(.semibold)
@@ -115,16 +130,21 @@ struct VocabularyView: View {
                     .lineLimit(2)
             }
             Spacer()
-            Button("Přijmout") {
-                store.accept(suggestion)
-                store.refreshOccurrences()
+            HStack(spacing: 6) {
+                Button("Přijmout") {
+                    store.accept(suggestion)
+                    store.refreshOccurrences()
+                }
+                .buttonStyle(.borderedProminent)
+                Button("Upravit…") {
+                    editingSuggestion = suggestion
+                    editing = suggestion.asTerm
+                }
+                Button("Zamítnout") { store.reject(suggestion) }
             }
-            Button("Upravit…") {
-                editingSuggestion = suggestion
-                editing = suggestion.asTerm
-            }
-            Button("Zamítnout") { store.reject(suggestion) }
+            .controlSize(.small)
         }
+        .padding(.vertical, 6)
     }
 
     private func suggestionDetail(_ suggestion: VocabularySuggestion) -> String {
@@ -140,6 +160,8 @@ struct VocabularyView: View {
         }
         return parts.joined(separator: " · ")
     }
+
+    // MARK: - Table
 
     private var filteredTerms: [VocabularyTerm] {
         store.terms.filter { term in
@@ -168,17 +190,21 @@ struct VocabularyView: View {
             }
             TableColumn("Prompt") { term in
                 if term.inPrompt && fitting.contains(term.id) {
-                    Image(systemName: "checkmark").help("Ve promptu Whisperu")
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(Theme.success)
+                        .help("V promptu Whisperu")
                 } else if term.inPrompt {
                     Image(systemName: "exclamationmark.triangle")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Theme.warning)
                         .help("Nevejde se do promptu Whisperu: opraví ho jen Claude")
                 }
             }
             .width(55)
             TableColumn("Oprava") { term in
                 if term.autoReplace {
-                    Image(systemName: "checkmark").help("Chybné tvary se nahradí hned po přepisu")
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(Theme.success)
+                        .help("Chybné tvary se nahradí hned po přepisu")
                 }
             }
             .width(55)
@@ -200,12 +226,15 @@ struct VocabularyView: View {
         } primaryAction: { ids in
             edit(ids.first)  // double click
         }
+        .clipShape(RoundedRectangle(cornerRadius: Theme.smallCornerRadius, style: .continuous))
         .overlay {
             if store.terms.isEmpty {
                 ContentUnavailableView(
                     "Slovník je prázdný",
                     systemImage: "character.book.closed",
                     description: Text("Přidej jména kolegů a zákazníků, zkratky a produkty, které Whisper komolí. Návrhy se objeví i samy po meetingech."))
+            } else if filteredTerms.isEmpty {
+                ContentUnavailableView.search(text: search)
             }
         }
     }
@@ -264,10 +293,10 @@ struct VocabularyView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let count = try store.importCSV(from: url)
-            message = "Načteno \(count) pojmů z \(url.lastPathComponent)."
+            notice = (.success, "Import hotový: \(czechCount(count, "pojem", "pojmy", "pojmů")) ze souboru \(url.lastPathComponent).")
             store.refreshOccurrences()
         } catch {
-            message = "Import se nepovedl: \(error.localizedDescription)"
+            notice = (.error, "Import se nepovedl: \(error.localizedDescription)")
         }
     }
 
@@ -278,9 +307,9 @@ struct VocabularyView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try store.exportCSV(to: url)
-            message = "Slovník uložen do \(url.lastPathComponent)."
+            notice = (.success, "Slovník uložen do \(url.lastPathComponent).")
         } catch {
-            message = "Export se nepovedl: \(error.localizedDescription)"
+            notice = (.error, "Export se nepovedl: \(error.localizedDescription)")
         }
     }
 }
@@ -297,6 +326,13 @@ struct TermEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                IconCircle(symbolName: isNew ? "plus" : "pencil", tone: .info, size: 28)
+                Text(isNew ? "Nový pojem" : "Upravit pojem").font(.headline)
+            }
+            .padding([.horizontal, .top], 20)
+            .padding(.bottom, 4)
+
             Form {
                 Section {
                     TextField("Správně", text: $term.term, prompt: Text("Kubernetes, PR, Mária Kováčová"))
