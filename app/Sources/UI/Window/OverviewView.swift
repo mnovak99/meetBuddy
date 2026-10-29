@@ -12,7 +12,7 @@ struct OverviewView: View {
             VStack(alignment: .leading, spacing: Theme.spacing) {
                 StateCard(model: model)
                 HStack(alignment: .top, spacing: Theme.spacing) {
-                    ProcessingCard(model: model)
+                    DashboardProcessingCard(model: model)
                     StorageCard(model: model)
                         .frame(width: 290)
                 }
@@ -211,7 +211,7 @@ private struct StateCard: View {
 // MARK: - Zpracování
 
 /// The pipeline: what runs now, what waits and how the last run ended.
-private struct ProcessingCard: View {
+private struct DashboardProcessingCard: View {
     let model: AppModel
 
     var body: some View {
