@@ -52,6 +52,18 @@ def test_unexpected_language_is_redone_in_czech() -> None:
     assert segments[0].language == "cs"
 
 
+def test_allowed_languages_can_be_configured() -> None:
+    transcriber = FakeTranscriber(languages=["cs"])
+
+    segments = build_transcript(
+        silence(10), None, [Turn(0, 8, "A")], transcriber, None, languages=("de", "en")
+    )
+
+    # Czech is not allowed here: redone in German, the first configured language.
+    assert [language for _, language in transcriber.calls] == [None, "de"]
+    assert segments[0].language == "de"
+
+
 def test_microphone_speech_is_the_user() -> None:
     mic = np.concatenate([silence(2), tone(4, amplitude=0.2), silence(2)])
     transcriber = FakeTranscriber(languages=["cs"])

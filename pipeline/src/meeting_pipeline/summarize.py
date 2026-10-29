@@ -1,10 +1,11 @@
 """Claude steps: clean the transcript (names, misrecognized terms) and write the note content.
 
 Both results are cached in the recording folder (cleaned.json, summary.json), so a re-run after a
-usage limit or a fix does not ask Claude again for finished steps.
+usage limit or a fix does not ask Claude again for finished steps. cleaned.json remembers the
+user name and the vocabulary it was made with: after the user changes either, the cleanup (and
+the summary built on it) is redone on the next run.
 """
 
-import json
 import logging
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
@@ -14,9 +15,16 @@ from typing import Any
 
 from meeting_pipeline.claude import ClaudeRunner
 from meeting_pipeline.config import Config
+from meeting_pipeline.files import read_json, write_json
 from meeting_pipeline.recording import Recording
 from meeting_pipeline.transcript import USER_SPEAKER, Segment
-from meeting_pipeline.vocabulary import CATEGORIES, Term, apply_spelling, merge_suggestions
+from meeting_pipeline.vocabulary import (
+    CATEGORIES,
+    Term,
+    apply_spelling,
+    merge_suggestions,
+    vocabulary_hash,
+)
 
 log = logging.getLogger(__name__)
 
@@ -199,6 +207,17 @@ def vocabulary_text(terms: list[Term]) -> str:
     return "\n".join(lines)
 
 
+def existing_frames(recording: Recording) -> list[dict[str, Any]]:
+    """Frames from meta.json that are still on disk. After `done` the app moves the frames not
+    chosen for the note to the Trash without rewriting meta.json, so a re-run must not offer
+    them to Claude or try to copy them."""
+    frames = recording.meta.get("frames") or []
+    kept = [frame for frame in frames if (recording.folder / frame["file"]).is_file()]
+    if len(kept) < len(frames):
+        log.info("%d of %d frames are no longer on disk", len(frames) - len(kept), len(frames))
+    return kept
+
+
 def clean(
     segments: list[Segment],
     recording: Recording,
@@ -212,8 +231,15 @@ def clean(
     Claude's vocabulary suggestions go to `suggestions_path` (the review queue in the app).
     """
     cache = recording.folder / CLEANED_FILE
+    fingerprint = {"userName": config.user_name, "vocabularyHash": vocabulary_hash(terms)}
+    cached = _cached_lines(cache, fingerprint)
+    if cached is not None:
+        return cached
     if cache.is_file():
-        return [Line(**item) for item in json.loads(cache.read_text(encoding="utf-8"))["lines"]]
+        # Made with another user name or vocabulary: the names and corrections are redone, and
+        # so is the summary built on them.
+        log.info("%s was made with other settings; cleaning again", CLEANED_FILE)
+        (recording.folder / SUMMARY_FILE).unlink(missing_ok=True)
 
     spelled = plain_lines(segments, recording, config, terms)
     transcript = "\n".join(
@@ -229,12 +255,13 @@ def clean(
     )
     result = runner(prompt, CLEAN_SCHEMA, cwd=recording.folder, allowed_tools=())
 
-    names = {
-        item["label"]: item["name"] + ("" if item["confident"] else " (?)")
-        for item in result["speakers"]
+    names = speaker_names(result)
+    corrections = {
+        item["id"]: item["text"]
+        for item in result.get("corrections") or []
+        if isinstance(item, dict) and isinstance(item.get("id"), int) and item.get("text")
     }
-    corrections = {item["id"]: item["text"] for item in result["corrections"]}
-    dropped = set(result["drop_ids"])
+    dropped = {item for item in result.get("drop_ids") or [] if isinstance(item, int)}
     lines = [
         Line(
             id=line.id,
@@ -248,17 +275,49 @@ def clean(
     ]
     if suggestions_path is not None:
         added = merge_suggestions(
-            suggestions_path, result["vocabulary_suggestions"], terms, recording.folder.name
-        )
+            suggestions_path, result.get("vocabulary_suggestions") or [], terms,
+            recording.folder.name,
+        )  # fmt: skip
         log.info("Vocabulary suggestions: %d new", added)
     log.info("Cleaned transcript: %d speakers named, %d corrections, %d dropped",
              len(names), len(corrections), len(dropped))  # fmt: skip
-    cache.write_text(
-        json.dumps({"speakers": result["speakers"], "lines": [asdict(line) for line in lines]},
-                   ensure_ascii=False, indent=1) + "\n",
-        encoding="utf-8",
-    )  # fmt: skip
+    write_json(
+        cache,
+        {
+            **fingerprint,
+            "speakers": [{"label": label, "name": name} for label, name in names.items()],
+            "lines": [asdict(line) for line in lines],
+        },
+    )
     return lines
+
+
+def speaker_names(result: dict[str, Any]) -> dict[str, str]:
+    """Display names by diarization label from Claude's answer, ignoring what would do harm:
+    a name for the user's own label (the microphone is always the user) and blank names."""
+    names: dict[str, str] = {}
+    for item in result.get("speakers") or []:
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get("label") or "").strip()
+        name = str(item.get("name") or "").strip()
+        if not label or not name or label == USER_SPEAKER:
+            continue
+        names[label] = name + ("" if item.get("confident", True) else " (?)")
+    return names
+
+
+def _cached_lines(cache: Path, fingerprint: dict[str, str]) -> list[Line] | None:
+    data = read_json(cache)
+    if not isinstance(data, dict):
+        return None
+    if any(data.get(key) != value for key, value in fingerprint.items()):
+        return None
+    try:
+        return [Line(**item) for item in data["lines"]]
+    except (KeyError, TypeError) as exc:
+        log.warning("Ignoring damaged %s (%s); cleaning again", CLEANED_FILE, exc)
+        return None
 
 
 def summarize(
@@ -266,10 +325,13 @@ def summarize(
 ) -> dict[str, Any]:
     """Content of the note (summary, tasks, chosen frames …). Cached in summary.json."""
     cache = recording.folder / SUMMARY_FILE
-    if cache.is_file():
-        return json.loads(cache.read_text(encoding="utf-8"))
+    cached = read_json(cache)
+    if isinstance(cached, dict) and all(key in cached for key in SUMMARY_SCHEMA["required"]):
+        return cached
+    if cached is not None:
+        log.warning("Ignoring incomplete %s; summarizing again", SUMMARY_FILE)
 
-    frames = recording.meta.get("frames") or []
+    frames = existing_frames(recording)
     frames_text = (
         "\n".join(
             f"- {frame['file']} ({clock(recording, frame['offsetSeconds'])})" for frame in frames
@@ -288,8 +350,10 @@ def summarize(
 
     # Only frames that really exist in this recording.
     known = {frame["file"] for frame in frames}
-    result["shared_content"] = [item for item in result["shared_content"] if item["frame"] in known]
+    result["shared_content"] = [
+        item for item in result.get("shared_content") or [] if item.get("frame") in known
+    ]
     log.info("Summary: %d tasks for the user, %d frames chosen",
-             len(result["my_tasks"]), len(result["shared_content"]))  # fmt: skip
-    cache.write_text(json.dumps(result, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+             len(result.get("my_tasks") or []), len(result["shared_content"]))  # fmt: skip
+    write_json(cache, result)
     return result

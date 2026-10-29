@@ -9,6 +9,16 @@ Sekci `[Unreleased]` doplňuj průběžně; `scripts/release.sh` z ní při vyd�
 - Licence MIT, zdrojáky jsou veřejné.
 - Volba „Nahrávat můj mikrofon“ (jde vypnout).
 - Varování v menu, když není vybraný Obsidian vault.
+- Pipeline respektuje nová nastavení: jazyky přepisu, model Whisperu, model Clauda, počet vláken, složka poznámek, přepis v poznámce, zápis úkolů do seznamu a podrobné logování (`--verbose`).
+
+### Opraveno
+- Zpracování dlouhých meetingů už appka neukončí jako zaseklé: pipeline během dlouhých kroků (rozpoznávání mluvčích, stahování modelu, Claude) průběžně obnovuje `status.json`.
+- Při ukončení appky pipeline zastaví i běžícího `claude` a při dalším spuštění pokračuje od hotových kroků.
+- Nečekaná chyba (poškozený soubor, chyba modelu) skončí jako `failed` s popisem místo věčného „transcribing“; poškozené mezivýsledky se přepočítají.
+- Opakované zpracování nevytváří duplicitní úkoly v `Moje úkoly.md` ani nepadá na snímcích přesunutých do Koše.
+- Když selže jen shrnutí, poznámka si nechá jména mluvčích a opravy z čištění.
+- Volání `claude` ignoruje všechny proměnné `ANTHROPIC_*` a `CLAUDE_CODE_*` a nespouští MCP servery uživatele.
+- Slovníkový pojem s obráceným lomítkem už neshodí automatickou opravu.
 
 ### Změněno
 - Výchozí nastavení bez osobních hodnot: jméno z účtu na Macu, mikrofon = výchozí vstup systému, `uv` a pipeline se najdou samy (pipeline ve složce, ze které byla appka sestavená). Stávající `config.json` zůstává beze změny.

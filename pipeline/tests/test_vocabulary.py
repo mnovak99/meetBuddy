@@ -81,6 +81,24 @@ def test_longer_alias_wins() -> None:
     assert apply_spelling("to je pí ár ka", terms) == "to je PRK"
 
 
+def test_term_with_a_backslash_is_inserted_literally() -> None:
+    terms = [Term(r"C:\share", aliases=["cé šér"], auto_replace=True)]
+    assert apply_spelling("je to na cé šér", terms) == r"je to na C:\share"
+
+
+def test_damaged_queue_is_replaced(tmp_path: Path) -> None:
+    path = tmp_path / "vocabulary-suggestions.json"
+    path.write_text("{broken", encoding="utf-8")
+    suggestion = {"term": "Grafana", "heard_as": [], "category": "product", "description": ""}
+
+    assert merge_suggestions(path, [suggestion], [], "x") == 1
+
+    assert [s["term"] for s in json.loads(path.read_text(encoding="utf-8"))["suggestions"]] == [
+        "Grafana"
+    ]
+    assert (tmp_path / "vocabulary-suggestions.json.lock").exists()
+
+
 def test_suggestions_are_queued_without_duplicates(tmp_path: Path) -> None:
     path = tmp_path / "vocabulary-suggestions.json"
     vocabulary = [Term("Kubernetes")]
