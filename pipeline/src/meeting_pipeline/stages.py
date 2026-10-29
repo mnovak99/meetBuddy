@@ -1,10 +1,11 @@
 """Pipeline stages. Each stage keeps its result in the recording folder, so a re-run (after a
-crash, a Claude usage limit or a fix) skips work that is already done."""
+crash, a Claude usage limit or a fix) skips work that is already done. Cache files are written
+atomically and a damaged one is rebuilt instead of crashing the run (see files.py)."""
 
-import json
 import logging
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -13,11 +14,13 @@ from meeting_pipeline import models
 from meeting_pipeline.audio import load_audio, speech_regions
 from meeting_pipeline.claude import ClaudeError, ClaudeRunner, run_claude
 from meeting_pipeline.config import Config
+from meeting_pipeline.files import read_json, write_json
 from meeting_pipeline.keychain import hf_token
 from meeting_pipeline.models import ModelError, Turn
 from meeting_pipeline.note import NoteResult, write_note
 from meeting_pipeline.recording import Recording
-from meeting_pipeline.summarize import clean, plain_lines, summarize
+from meeting_pipeline.status import Reporter, State
+from meeting_pipeline.summarize import Line, clean, plain_lines, summarize
 from meeting_pipeline.transcript import (
     TRANSCRIPT_FILE,
     Segment,
@@ -39,6 +42,10 @@ log = logging.getLogger(__name__)
 DIARIZATION_FILE = "diarization.json"
 
 
+def _no_report(_state: State, _message: str) -> None:
+    pass
+
+
 @dataclass
 class Components:
     """The heavy parts, replaceable in tests."""
@@ -52,12 +59,14 @@ class Components:
     count_tokens: Callable[[str], int] | None = None
 
 
-def default_components() -> Components:
+def default_components(config: Config) -> Components:
+    """The real models and Claude, set up from config.json (model names, threads)."""
     token = hf_token()
     return Components(
-        diarize=lambda samples: models.diarize(samples, token),
-        transcribe=models.transcribe,
+        diarize=partial(models.diarize, token=token, threads=config.pipeline_threads),
+        transcribe=partial(models.transcribe, model=config.whisper_model),
         vocabulary=load_vocabulary(),
+        claude=partial(run_claude, model=config.claude_model or None),
         suggestions_path=SUGGESTIONS_FILE,
         count_tokens=whisper_token_counter(),
     )
@@ -75,25 +84,26 @@ def clear_caches(folder: Path) -> None:
 def run_transcription(
     recording: Recording,
     components: Components,
+    config: Config,
     *,
     force: bool = False,
-    report: Callable[[str], None] = lambda _: None,
+    report: Reporter = _no_report,
 ) -> tuple[list[Segment], str | None]:
     """Diarize and transcribe; returns the transcript (from transcript.json if already done) and a
     warning when the speakers could not be told apart."""
     folder = recording.folder
-    if (folder / TRANSCRIPT_FILE).is_file() and not force:
+    if not force and (cached := load_transcript(folder)) is not None:
         log.info("Using existing %s", TRANSCRIPT_FILE)
-        return load_transcript(folder), _transcript_warning(folder)
+        return cached
 
-    report("Převádím zvuk")
+    report(State.TRANSCRIBING, "Převádím zvuk")
     app = load_audio(recording.audio)
     mic = load_audio(recording.microphone) if recording.microphone else None
 
     warning: str | None = None
     turns = _cached_turns(folder) if not force else None
     if turns is None:
-        report("Rozpoznávám mluvčí")
+        report(State.TRANSCRIBING, "Rozpoznávám mluvčí")
         try:
             turns = components.diarize(app)
             _save_turns(folder, turns)
@@ -107,26 +117,24 @@ def run_transcription(
     log.info("Diarization: %d turns, %d speakers", len(turns), speakers)
 
     def progress(done: int, total: int) -> None:
-        report(f"Přepisuji {done}/{total}")
+        report(State.TRANSCRIBING, f"Přepisuji {done}/{total}")
 
     if components.count_tokens:
         prompt = initial_prompt(components.vocabulary, count_tokens=components.count_tokens)
     else:
         prompt = initial_prompt(components.vocabulary)
-    segments = build_transcript(app, mic, turns, components.transcribe, prompt, progress)
+    segments = build_transcript(
+        app, mic, turns, components.transcribe, prompt, progress,
+        languages=config.transcript_languages,
+    )  # fmt: skip
     save_transcript(
         folder,
         segments,
-        {"asr": models.WHISPER_MODEL, "diarization": None if warning else models.DIARIZATION_MODEL},
+        {"asr": config.whisper_model, "diarization": None if warning else models.DIARIZATION_MODEL},
         warning=warning,
     )
     log.info("Transcript: %d segments", len(segments))  # counts only, never the content
     return segments, warning
-
-
-def _transcript_warning(folder: Path) -> str | None:
-    data = json.loads((folder / TRANSCRIPT_FILE).read_text(encoding="utf-8"))
-    return data.get("warning")
 
 
 def run_note(
@@ -135,38 +143,61 @@ def run_note(
     components: Components,
     config: Config,
     *,
-    report: Callable[[str], None] = lambda _: None,
+    report: Reporter = _no_report,
 ) -> tuple[NoteResult, str | None]:
     """Clean, summarize and write the note. Returns the note and the Claude error, if any.
 
     Without Claude (usage limit, not logged in …) the note gets the transcript only and its status
-    is needs_summary; running the pipeline again later adds the summary.
+    is needs_summary; running the pipeline again later adds the summary. When only the summary
+    fails, the cleaned lines (names, corrections) are still used for the note.
+
+    The note on disk says `status: processing` until note.finish_note() is called (after the
+    final status.json), see note.py.
     """
-    claude_error: str | None = None
+    lines, summary, claude_error = run_summary(
+        recording, segments, components, config, report=report
+    )
+    report(State.WRITING, "Zapisuji poznámku do Obsidianu")
+    return write_note(recording, lines, summary, config), claude_error
+
+
+def run_summary(
+    recording: Recording,
+    segments: list[Segment],
+    components: Components,
+    config: Config,
+    *,
+    report: Reporter = _no_report,
+) -> tuple[list[Line], dict | None, str | None]:
+    """The two Claude steps. Returns the lines, the summary (None without Claude) and the error."""
+    report(State.SUMMARIZING, "Čistím přepis a přiřazuji jména")
     try:
-        report("Čistím přepis a přiřazuji jména")
         lines = clean(
             segments, recording, config, components.vocabulary, components.claude,
             components.suggestions_path,
         )  # fmt: skip
-        report("Píšu shrnutí")
+    except ClaudeError as exc:
+        log.warning("Claude not available for the cleanup: %s", exc)
+        return plain_lines(segments, recording, config, components.vocabulary), None, str(exc)
+    report(State.SUMMARIZING, "Píšu shrnutí")
+    try:
         summary = summarize(lines, recording, config, components.claude)
     except ClaudeError as exc:
-        log.warning("Claude not available: %s", exc)
-        claude_error = str(exc)
-        lines, summary = plain_lines(segments, recording, config, components.vocabulary), None
-    report("Zapisuji poznámku do Obsidianu")
-    return write_note(recording, lines, summary, config), claude_error
+        log.warning("Claude not available for the summary: %s", exc)
+        return lines, None, str(exc)
+    return lines, summary, None
 
 
 def _cached_turns(folder: Path) -> list[Turn] | None:
-    path = folder / DIARIZATION_FILE
-    if not path.is_file():
+    data = read_json(folder / DIARIZATION_FILE)
+    if data is None:
         return None
-    return [Turn(**item) for item in json.loads(path.read_text(encoding="utf-8"))]
+    try:
+        return [Turn(**item) for item in data]
+    except (TypeError, ValueError) as exc:
+        log.warning("Ignoring damaged %s (%s); diarizing again", DIARIZATION_FILE, exc)
+        return None
 
 
 def _save_turns(folder: Path, turns: list[Turn]) -> None:
-    (folder / DIARIZATION_FILE).write_text(
-        json.dumps([asdict(turn) for turn in turns], indent=1) + "\n", encoding="utf-8"
-    )
+    write_json(folder / DIARIZATION_FILE, [asdict(turn) for turn in turns])

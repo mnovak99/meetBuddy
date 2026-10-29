@@ -1,11 +1,17 @@
 """Writes the Obsidian note (format: skill `obsidian-note`).
 
-Meetings/YYYY/MM/YYYY-MM-DD HHmm <Title>.md, chosen frames in
-Meetings/YYYY/MM/attachments/YYYY-MM-DD HHmm/, the user's tasks appended to Meetings/Moje úkoly.md.
+<notesFolder>/YYYY/MM/YYYY-MM-DD HHmm <Title>.md, chosen frames in
+<notesFolder>/YYYY/MM/attachments/YYYY-MM-DD HHmm/, the user's tasks appended to
+<notesFolder>/Moje úkoly.md (`notesFolder` in config.json, "Meetings" by default).
 Only core Markdown, callouts and wiki-links: no Obsidian plugins needed.
+
+The note is first written with `status: processing`; `finish_note` sets the final status once
+status.json says the run is over. A run stopped in between leaves a note that the next run
+replaces, instead of a second copy "… (2).md" next to it.
 """
 
 import json
+import logging
 import re
 import shutil
 from dataclasses import dataclass
@@ -14,14 +20,21 @@ from pathlib import Path
 from typing import Any
 
 from meeting_pipeline.config import Config
+from meeting_pipeline.files import write_json, write_text
 from meeting_pipeline.recording import Recording
 from meeting_pipeline.summarize import SOURCE_NAMES, Line, started_at
 
+log = logging.getLogger(__name__)
+
 NOTE_RESULT_FILE = "note.json"
 TASKS_NOTE = "Moje úkoly.md"
+PROCESSING_STATUS = "processing"
 # A note with one of these statuses was written by the pipeline and not finished: safe to replace.
-REPLACEABLE_STATUSES = ("processing", "needs_summary")
+REPLACEABLE_STATUSES = (PROCESSING_STATUS, "needs_summary")
 INVALID_FILE_CHARS = re.compile(r'[\\/:*?"<>|#^\[\]]')
+# "- [ ] task (due) ([[note name]])"; the link is missing on lines the user wrote by hand.
+TASK_LINE = re.compile(r"^- \[[ xX]\] (?P<task>.*?)(?: \(\[\[(?P<note>[^\]]+)\]\]\))?$")
+COPY_SUFFIX = re.compile(r" \(\d+\)$")
 
 
 class NoteError(Exception):
@@ -32,6 +45,8 @@ class NoteError(Exception):
 class NoteResult:
     path: Path
     selected_frames: list[str]
+    # The final status (done / needs_summary); the note on disk says `processing` until
+    # finish_note() is called.
     status: str
 
 
@@ -45,32 +60,44 @@ def write_note(
     if not vault.is_dir():
         raise NoteError(f"Obsidian vault not found: {vault}")
 
+    notes = vault / config.notes_folder
     start = started_at(recording)
     stamp = f"{start:%Y-%m-%d %H%M}"
     title = clean_title((recording.meta.get("calendar") or {}).get("title") or "")
-    folder = vault / "Meetings" / f"{start:%Y}" / f"{start:%m}"
+    folder = notes / f"{start:%Y}" / f"{start:%m}"
     folder.mkdir(parents=True, exist_ok=True)
     note_path = _free_path(folder / f"{stamp}{' ' + title if title else ''}.md")
 
     status = "done" if summary else "needs_summary"
-    frames = _copy_frames(recording, summary, folder / "attachments" / stamp) if summary else []
-    note_path.write_text(
-        render(recording, lines, summary, config, title, stamp, status), encoding="utf-8"
-    )
     if summary:
-        append_tasks(vault / "Meetings" / TASKS_NOTE, summary["my_tasks"], note_path.stem)
+        summary = _with_existing_frames(recording, summary)
+    frames = _copy_frames(recording, summary, folder / "attachments" / stamp) if summary else []
+    write_text(
+        note_path, render(recording, lines, summary, config, title, stamp, PROCESSING_STATUS)
+    )
+    if summary and config.append_tasks_to_list:
+        append_tasks(notes / TASKS_NOTE, summary["my_tasks"], note_path.stem)
 
     result = NoteResult(path=note_path, selected_frames=frames, status=status)
-    (recording.folder / NOTE_RESULT_FILE).write_text(
-        json.dumps(
-            {"notePath": str(note_path), "selectedFrames": frames, "status": status},
-            ensure_ascii=False,
-            indent=1,
-        )
-        + "\n",
-        encoding="utf-8",
+    write_json(
+        recording.folder / NOTE_RESULT_FILE,
+        {"notePath": str(note_path), "selectedFrames": frames, "status": status},
     )
     return result
+
+
+def finish_note(note: NoteResult) -> None:
+    """Replace `status: processing` in the frontmatter with the final status of the note."""
+    text = note.path.read_text(encoding="utf-8")
+    final = re.sub(
+        rf"^status: {PROCESSING_STATUS}$",
+        f"status: {note.status}",
+        text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    if final != text:
+        write_text(note.path, final)
 
 
 def clean_title(title: str) -> str:
@@ -148,16 +175,20 @@ def render(
             "",
         ]
 
-    out += ["## Přepis", "> [!note]- Plný přepis"]
-    for index, line in enumerate(lines):
-        if index:
-            out.append(">")
-        out.append(f"> **[{line.time}] {line.speaker}:** {line.text}")
+    if config.note_include_transcript:
+        out += ["## Přepis", "> [!note]- Plný přepis"]
+        for index, line in enumerate(lines):
+            if index:
+                out.append(">")
+            out.append(f"> **[{line.time}] {line.speaker}:** {line.text}")
+    while out and out[-1] == "":
+        out.pop()
     return "\n".join(out) + "\n"
 
 
 def append_tasks(tasks_note: Path, tasks: list[dict[str, Any]], note_name: str) -> None:
-    """Add the user's tasks to the shared task list, never twice."""
+    """Add the user's tasks to the shared task list, never twice: the same task from the same
+    meeting is skipped even when the note was written again as "… (2)"."""
     existing = (
         tasks_note.read_text(encoding="utf-8") if tasks_note.is_file() else "# Moje úkoly\n\n"
     )
@@ -166,12 +197,16 @@ def append_tasks(tasks_note: Path, tasks: list[dict[str, Any]], note_name: str) 
     new = [line for line in new if _task_key(line) not in known]
     if new:
         separator = "" if existing.endswith("\n") else "\n"
-        tasks_note.write_text(existing + separator + "\n".join(new) + "\n", encoding="utf-8")
+        write_text(tasks_note, existing + separator + "\n".join(new) + "\n")
 
 
-def _task_key(line: str) -> str:
-    """The same task, done or not: "- [x] Foo" equals "- [ ] Foo"."""
-    return re.sub(r"^- \[[ xX]\] ", "", line.strip())
+def _task_key(line: str) -> tuple[str, str]:
+    """The same task from the same meeting, done or not: "- [x] Foo ([[A (2)]])" equals
+    "- [ ] Foo ([[A]])"."""
+    match = TASK_LINE.match(line.strip())
+    if not match:
+        return (line.strip(), "")
+    return (match["task"], COPY_SUFFIX.sub("", match["note"] or ""))
 
 
 def _task(task: str, due: str | None) -> str:
@@ -204,6 +239,18 @@ def _free_path(path: Path) -> Path:
 def _status(note: Path) -> str | None:
     match = re.search(r"^status:\s*(\S+)\s*$", note.read_text(encoding="utf-8"), re.MULTILINE)
     return match.group(1) if match else None
+
+
+def _with_existing_frames(recording: Recording, summary: dict[str, Any]) -> dict[str, Any]:
+    """Only chosen frames still on disk: summary.json may be older than the frames folder (the app
+    trashes unselected frames after `done`, the user may delete more by hand)."""
+    chosen = summary.get("shared_content") or []
+    kept = [item for item in chosen if (recording.folder / item["frame"]).is_file()]
+    if len(kept) < len(chosen):
+        log.warning(
+            "%d chosen frames are missing from the recording folder", len(chosen) - len(kept)
+        )
+    return {**summary, "shared_content": kept}
 
 
 def _copy_frames(recording: Recording, summary: dict[str, Any] | None, target: Path) -> list[str]:

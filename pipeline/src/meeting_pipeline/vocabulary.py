@@ -11,15 +11,18 @@ Three uses, as in commercial speech-to-text services:
 Edited in the app (Slovník). Schema: shared/vocabulary.schema.json.
 """
 
+import fcntl
+import hashlib
 import json
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from meeting_pipeline.config import SUPPORT_DIR
+from meeting_pipeline.files import read_json, write_json
 
 VOCABULARY_FILE = SUPPORT_DIR / "vocabulary.json"
 SUGGESTIONS_FILE = SUPPORT_DIR / "vocabulary-suggestions.json"
@@ -60,6 +63,12 @@ def load_vocabulary(path: Path = VOCABULARY_FILE) -> list[Term]:
             )
         )
     return terms
+
+
+def vocabulary_hash(terms: list[Term]) -> str:
+    """Short fingerprint of the vocabulary: a cached cleanup made with another one is redone."""
+    payload = json.dumps([asdict(term) for term in terms], ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
 def _estimate_tokens(text: str) -> int:
@@ -107,7 +116,8 @@ def apply_spelling(text: str, terms: list[Term]) -> str:
     )
     for alias, correct in replacements:
         pattern = re.compile(rf"(?<!\w){re.escape(alias)}(?!\w)", re.IGNORECASE)
-        text = pattern.sub(correct, text)
+        # A function, not a replacement string: a term with a backslash must stay literal.
+        text = pattern.sub(lambda _match, correct=correct: correct, text)
     return text
 
 
@@ -118,15 +128,30 @@ def merge_suggestions(
 
     Skips terms already in the vocabulary, already rejected by the user or already queued (then
     only the new misrecognitions are added). Returns the number of new suggestions.
+
+    The read-modify-write runs under an advisory lock (`<file>.lock`), so two pipeline runs (the
+    app's and one started by hand) cannot lose each other's suggestions. The app does not take
+    the lock; it only ever sees whole files thanks to the atomic write.
     """
-    data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path.with_name(path.name + ".lock"), "w", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return _merge_suggestions(path, suggestions, vocabulary, source)
+
+
+def _merge_suggestions(
+    path: Path, suggestions: list[dict[str, Any]], vocabulary: list[Term], source: str
+) -> int:
+    data = read_json(path)
+    if not isinstance(data, dict):
+        data = {}
     queued: list[dict[str, Any]] = data.get("suggestions", [])
     rejected = {term.casefold() for term in data.get("rejected", [])}
     known = {term.term.casefold() for term in vocabulary}
     by_term = {item["term"].casefold(): item for item in queued}
     added = 0
     for suggestion in suggestions:
-        term = suggestion.get("term", "").strip()
+        term = str(suggestion.get("term") or "").strip()
         key = term.casefold()
         if not term or key in known or key in rejected:
             continue
@@ -148,13 +173,12 @@ def merge_suggestions(
         queued.append(item)
         by_term[key] = item
         added += 1
-    data = {
-        "schemaVersion": 1,
-        "suggestions": queued[-MAX_SUGGESTIONS:],
-        "rejected": data.get("rejected", []),
-    }
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    temporary.replace(path)
+    write_json(
+        path,
+        {
+            "schemaVersion": 1,
+            "suggestions": queued[-MAX_SUGGESTIONS:],
+            "rejected": data.get("rejected", []),
+        },
+    )
     return added

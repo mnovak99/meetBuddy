@@ -52,7 +52,7 @@ docs/       rozhodnutí a poznámky
 - Jazyky: čeština (kolegové), slovenština (zákazníci), ~10 % angličtina. Střídání mluvčích, hovorová řeč, anglicismy. Přepis v původním jazyce, poznámky česky.
 - `mlx-whisper` s modelem large-v3-turbo, auto-detekce jazyka. Slovník: krátký výběr do `initial_prompt`, celý slovník do Claude čištění.
 - Mluvčí: `mic.m4a` je vždy uživatel (`userName`). Diarizace jen na `audio.m4a` → Claude přiřadí jména podle účastníků z kalendáře a kontextu, nejistá označí „(?)“.
-- LLM výhradně Claude Code headless přes Team předplatné uživatele. Žádný API klíč, žádné jiné cloudové služby. Pipeline z env pro volání `claude` odstraní `ANTHROPIC_API_KEY`.
+- LLM výhradně Claude Code headless přes Team předplatné uživatele. Žádný API klíč, žádné jiné cloudové služby. Pipeline z env pro volání `claude` odstraní všechny proměnné `ANTHROPIC_*` a `CLAUDE_CODE_*`.
 - Zpracování hned po meetingu na pozadí. Musí nechat prostor pro VS Code + 1 Docker kontejner. Poznámka může být klidně až druhý den.
 
 **Kalendář**: EventKit (Google i Outlook účty v macOS Kalendáři) → název meetingu a účastníci. Bez události: název = datum a čas.

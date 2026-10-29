@@ -173,6 +173,45 @@ Technical findings that are not obvious from the code. Product decisions live in
 - The HF token can be replaced from Nastavení (stored with the `security` tool, like the pipeline
   reads it).
 
+## Pipeline hardening (2026-10-29)
+
+Based on a read-only audit of the Python pipeline (12 findings). The new settings
+(`transcriptLanguages`, `whisperModel`, `claudeModel`, `pipelineThreads`, `notesFolder`,
+`noteIncludeTranscript`, `appendTasksToList`, `debugLogging`) are read by `Config` and wired
+through `stages.default_components(config)`.
+
+- Heartbeat: `StatusReporter` rewrites status.json with the last state every 60 s from a daemon
+  thread while a stage runs, so the app's 30-minute watchdog only kills runs that are really
+  stuck (diarization of a 2-hour meeting, the first model download and one Claude call all report
+  nothing for longer). It is a context manager: the thread stops before the final status is
+  written, so a late heartbeat can never overwrite `done` or `failed`.
+- SIGTERM (the app quits or deletes the recording): a handler terminates a running `claude`
+  child (tracked with `Popen`) and raises `SystemExit(143)`. No final status is written on
+  purpose: the folder stays in progress and the app resumes it at the next launch, reusing the
+  finished stages from their caches. Python signal handlers run between bytecodes, so a SIGTERM
+  inside a long native call (one diarization batch) takes effect when the call returns.
+- Any other exception ends as `failed` with `Type: message` and a traceback in pipeline.log,
+  instead of a run that looks stuck at `transcribing`. Model inference errors are `ModelError`.
+- Cache files (diarization.json, transcript.json, cleaned.json, summary.json, note.json), the
+  note, `Moje úkoly.md` and vocabulary-suggestions.json are written atomically (temporary file +
+  rename, `files.py`); a damaged cache is logged and rebuilt. cleaned.json stores `userName` and
+  a hash of the vocabulary: when either changes, the cleanup and the summary built on it are
+  redone on the next run.
+- The note is written with `status: processing` and flipped to `done` / `needs_summary` only
+  after status.json is final. A run stopped in between leaves a note that the next run replaces
+  (the same rule as `needs_summary`) instead of a second copy "(2).md". The task list dedupes on
+  task text + meeting (note name without the "(n)" suffix), ticked off or not.
+- When only the summary call fails, the cleaned lines (names, corrections) are kept for the
+  `needs_summary` note. Only frames that exist on disk are offered to Claude and copied: after
+  `done` the app trashes the unselected ones without rewriting meta.json.
+- Claude calls: every `ANTHROPIC_*` / `CLAUDE_CODE_*` variable is stripped (not just the API
+  key), `--strict-mcp-config` keeps the user's MCP servers from starting for each call and
+  `--model` comes from `claudeModel`. Answers are checked: a name for the label USER or a blank
+  name is ignored, a non-object JSON answer counts as a failed attempt.
+- vocabulary-suggestions.json: the read-modify-write runs under an advisory `flock` on
+  `vocabulary-suggestions.json.lock`, so a pipeline started by hand cannot race the app's run.
+  The Swift app does not take the lock; it only ever sees whole files (atomic writes).
+
 ## Public repository (2026-10-14)
 
 - Sources are public under MIT; the app is shared only as a build from source (the release zips are
