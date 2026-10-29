@@ -8,11 +8,30 @@ Sekci `[Unreleased]` doplňuj průběžně; `scripts/release.sh` z ní při vyd�
 ### Přidáno
 - Licence MIT, zdrojáky jsou veřejné.
 - Volba „Nahrávat můj mikrofon“ (jde vypnout).
-- Varování v menu, když není vybraný Obsidian vault.
+- Nová nastavení (`config.json`, Nastavení → záložky):
+  - **Detekce:** prohlížeč pro Google Meet (Brave, Chrome, Edge, Arc, Vivaldi, Opera nebo vlastní bundle ID), interval kontroly, konec bez jakéhokoli signálu (`endGraceSeconds`), automatické ukončení nahrávání, když po pravděpodobném konci nikdo neodpoví (`autoStopMinutes`, výchozí vypnuto).
+  - **Notifikace:** zvuk a jednotlivé druhy notifikací (konec meetingu, hotová poznámka, úložiště, problémy při nahrávání); „Nahrávat?“ a chyby se zobrazují vždy.
+  - **AI a pipeline:** jazyky přepisu, model Whisperu, model Clauda, přepis do poznámky, zápis do „Moje úkoly.md“, název složky poznámek, počet vláken CPU, nezpracovávat během nahrávání (výchozí zapnuto), zpracovat až když Mac N minut nepoužíváš.
+  - **Vzhled a diagnostika:** ikona v menu baru (duch / symbol), čas nahrávání vedle ikony, podrobné logování.
+- Checklist připravenosti (oprávnění, vault, token, Claude, uv a pipeline, start po přihlášení) s tlačítky, které rovnou vyžádají oprávnění nebo otevřou správné místo.
 
 ### Změněno
 - Výchozí nastavení bez osobních hodnot: jméno z účtu na Macu, mikrofon = výchozí vstup systému, `uv` a pipeline se najdou samy (pipeline ve složce, ze které byla appka sestavená). Stávající `config.json` zůstává beze změny.
 - Vydání jen z Terminálu (`scripts/release.sh`).
+- Ovládání z menu baru je panel místo rozbalovacího menu; Nastavení je samostatné okno se záložkami (⌘,), změny se ukládají hned.
+- Pipeline čeká, dokud běží nahrávání (jde vypnout), a volitelně na nečinnost Macu.
+- Pipeline dostává z appky `--verbose` při podrobném logování a počet vláken z nastavení; z prostředí se odstraňují všechny proměnné `ANTHROPIC_*` a `CLAUDE_CODE_*`.
+
+### Opraveno
+- Fronta pipeline se zasekla, když se zpracování nepodařilo spustit (chybějící složka pipeline, smazaná nahrávka).
+- „Přepsat znovu od začátku“ u právě zpracovávané nahrávky přepisovalo její `status.json`; teď se provede po skončení běžícího zpracování.
+- Smazání nahrávky ve frontě nebo ve zpracování ji nejdřív z fronty odstraní a zpracování zastaví.
+- Zapnutí mikrofonu v Nastavení si hned vyžádá oprávnění (dřív až po restartu); nevyžádaná oprávnění se nabízejí k povolení místo odkazu do Nastavení systému.
+- Ukončení appky těsně po vypínání Macu už nepřeruší dokončování nahrávky; druhá nahrávka nemůže přepsat rozpracovanou.
+- Víc krátkých nahrávek čekajících na „Zahodit / Ponechat“ najednou; bez odpovědi se zpracují po příštím spuštění.
+- Ukončení appky během zpracování už nehlásí falešné selhání.
+- Hodnoty mimo rozsah schématu (`audioRetentionDays`, `storageLimitGB`, `minDurationMinutes`) se ořezávají.
+- Text o oprávnění systémového zvuku odkazoval na „Meeting Assistant“.
 
 ### Odstraněno
 - Tlačítko pro vydání na GitHubu a self-hosted runner: u veřejného repa by cizí kód mohl běžet na Macu.

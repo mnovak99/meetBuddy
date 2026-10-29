@@ -36,3 +36,6 @@ transcript*.json
 .env
 .env.*
 .claude/settings.local.json
+
+# Agent worktrees
+.claude/worktrees/
