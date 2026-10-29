@@ -1,6 +1,6 @@
 import Foundation
 
-/// Moves old meeting notes in the Obsidian vault to Meetings/Archiv/YYYY/MM/, together with
+/// Moves old meeting notes in the Obsidian vault to <notesFolder>/Archiv/YYYY/MM/, together with
 /// their attachments, by hand from the Úložiště section (always confirmed first).
 ///
 /// Links keep working: Obsidian finds notes by name ([[2026-10-14 1400 Sprint]]) and embedded
@@ -15,8 +15,10 @@ nonisolated enum NoteArchiver {
 
     /// Notes (and their attachment folders) older than `cutoff`, judged by the date at the start
     /// of the file name ("2026-10-14 1400 …md").
-    static func plan(vault: URL, olderThan cutoff: Date, calendar: Calendar = .current) -> [Move] {
-        let meetings = vault.appending(path: "Meetings", directoryHint: .isDirectory)
+    static func plan(
+        vault: URL, olderThan cutoff: Date, notesFolder: String = "Meetings", calendar: Calendar = .current
+    ) -> [Move] {
+        let meetings = vault.appending(path: notesFolder, directoryHint: .isDirectory)
         let archive = meetings.appending(path: archiveFolder, directoryHint: .isDirectory)
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")

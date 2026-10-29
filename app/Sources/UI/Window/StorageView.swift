@@ -47,7 +47,7 @@ struct StorageView: View {
         ) {
             Button("Přesunout do archivu") { archive() }
         } message: {
-            Text("Poznámky i přílohy se přesunou do Meetings/\(NoteArchiver.archiveFolder)/RRRR/MM ve vaultu.")
+            Text("Poznámky i přílohy se přesunou do \(model.config.notesFolder)/\(NoteArchiver.archiveFolder)/RRRR/MM ve vaultu.")
         }
         // Runs when the view appears and again whenever the months or the vault change; a
         // previous scan still running is cancelled.
@@ -155,7 +155,7 @@ struct StorageView: View {
                                 Text("K archivaci: \(czechCount(NoteArchiver.noteCount(archivePlan), "poznámka", "poznámky", "poznámek"))")
                             }
                         }
-                        Text("Poznámky i s přílohami se přesunou do Meetings/\(NoteArchiver.archiveFolder)/RRRR/MM. Odkazy v Obsidianu zůstanou funkční.")
+                        Text("Poznámky i s přílohami se přesunou do \(model.config.notesFolder)/\(NoteArchiver.archiveFolder)/RRRR/MM. Odkazy v Obsidianu zůstanou funkční.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Button("Archivovat…") { confirmArchive = true }
@@ -184,7 +184,7 @@ struct StorageView: View {
         "\(archiveMonths)|\(model.config.obsidianVaultPath)"
     }
 
-    /// Scans the vault in the background (it walks Meetings/RRRR/MM); the UI shows a spinner.
+    /// Scans the vault in the background (it walks <notesFolder>/RRRR/MM); the UI shows a spinner.
     private func computeArchivePlan() async {
         guard let vault = model.config.vaultURL,
               let cutoff = Calendar.current.date(byAdding: .month, value: -archiveMonths, to: .now)
@@ -194,8 +194,9 @@ struct StorageView: View {
         }
         planning = true
         defer { planning = false }
+        let notesFolder = model.config.notesFolder
         let plan = await Task.detached(priority: .utility) {
-            NoteArchiver.plan(vault: vault, olderThan: cutoff)
+            NoteArchiver.plan(vault: vault, olderThan: cutoff, notesFolder: notesFolder)
         }.value
         // The months changed meanwhile: a newer scan is already running, keep its result.
         guard !Task.isCancelled else { return }
@@ -210,7 +211,7 @@ struct StorageView: View {
                 try await Task.detached(priority: .userInitiated) {
                     try NoteArchiver.perform(plan)
                 }.value
-                notice = (.success, "\(czechCount(NoteArchiver.noteCount(plan), "poznámka přesunuta", "poznámky přesunuty", "poznámek přesunuto")) do Meetings/\(NoteArchiver.archiveFolder).")
+                notice = (.success, "\(czechCount(NoteArchiver.noteCount(plan), "poznámka přesunuta", "poznámky přesunuty", "poznámek přesunuto")) do \(model.config.notesFolder)/\(NoteArchiver.archiveFolder).")
             } catch {
                 notice = (.error, "Archivace se nepovedla: \(error.localizedDescription)")
             }
