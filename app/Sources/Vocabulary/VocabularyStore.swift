@@ -15,6 +15,8 @@ final class VocabularyStore {
 
     @ObservationIgnored let vocabularyURL: URL
     @ObservationIgnored let suggestionsURL: URL
+    /// Incremented by every `refreshOccurrences`; a count finished for an older call is dropped.
+    @ObservationIgnored private var occurrenceGeneration = 0
 
     init(
         vocabularyURL: URL = AppPaths.supportDirectory.appending(path: "vocabulary.json"),
@@ -50,7 +52,11 @@ final class VocabularyStore {
 
     // MARK: - Editing (every change is saved right away)
 
-    /// Adds a new term or replaces the one with the same id.
+    /// Adds a new term or replaces the one with the same id. A new term whose name already exists
+    /// (any case) updates that entry instead of adding a second one: „Přidat“ with a known term,
+    /// or accepting a suggestion for a term that is in the vocabulary already. The new values
+    /// win, but nothing the user already had is lost: aliases are merged, an empty description
+    /// keeps the old one and `inPrompt` / `autoReplace` stay on when they were on (see `merge`).
     func upsert(_ term: VocabularyTerm) {
         var clean = term
         clean.term = term.term.trimmingCharacters(in: .whitespaces)
@@ -58,10 +64,28 @@ final class VocabularyStore {
         guard !clean.term.isEmpty else { return }
         if let index = terms.firstIndex(where: { $0.id == clean.id }) {
             terms[index] = clean
+        } else if let index = terms.firstIndex(where: { $0.term.lowercased() == clean.term.lowercased() }) {
+            terms[index] = Self.merge(clean, into: terms[index])
         } else {
             terms.append(clean)
         }
         save()
+    }
+
+    /// `existing` updated with `update`: the id stays (SwiftUI selection, no duplicate entry),
+    /// the new spelling, category and flags apply, aliases are merged and an empty new description
+    /// keeps the old one.
+    nonisolated static func merge(_ update: VocabularyTerm, into existing: VocabularyTerm) -> VocabularyTerm {
+        var merged = update
+        merged.id = existing.id
+        let known = Set(existing.aliases.map { $0.lowercased() })
+        merged.aliases = existing.aliases + update.aliases.filter { !known.contains($0.lowercased()) }
+        if merged.description.isEmpty {
+            merged.description = existing.description
+        }
+        merged.inPrompt = existing.inPrompt || update.inPrompt
+        merged.autoReplace = existing.autoReplace || update.autoReplace
+        return merged
     }
 
     func delete(_ ids: Set<UUID>) {
@@ -114,17 +138,33 @@ final class VocabularyStore {
     // MARK: - Occurrences
 
     /// Counts the terms in the transcripts of recent recordings (cleaned ones when available).
-    func refreshOccurrences(recordingsDirectory: URL = RecordingFolder.recordingsDirectory, now: Date = .now) {
+    /// Reading and searching the transcripts can take a while, so it runs off the main thread;
+    /// `occurrences` is updated when done. A newer call wins: the result of an older one still
+    /// running is dropped. The returned task lets tests wait for the result.
+    @discardableResult
+    func refreshOccurrences(
+        recordingsDirectory: URL = RecordingFolder.recordingsDirectory, now: Date = .now
+    ) -> Task<Void, Never> {
+        occurrenceGeneration += 1
+        let generation = occurrenceGeneration
+        let names = terms.map(\.term)
         let since = now.addingTimeInterval(-Double(Self.occurrenceDays) * 24 * 3600)
-        let texts = Self.transcriptTexts(in: recordingsDirectory, since: since)
-        var counts: [String: Int] = [:]
-        for term in terms {
-            counts[term.term.lowercased()] = texts.reduce(0) { $0 + VocabularyRules.occurrences(of: term.term, in: $1) }
+        // Task.detached = not on the main actor; only plain values (paths, strings) go in.
+        return Task.detached(priority: .utility) {
+            let texts = Self.transcriptTexts(in: recordingsDirectory, since: since)
+            var counts: [String: Int] = [:]
+            for name in names {
+                counts[name.lowercased()] = texts.reduce(0) { $0 + VocabularyRules.occurrences(of: name, in: $1) }
+            }
+            // Back to the main actor to touch the observable state.
+            await MainActor.run { [counts] in
+                guard self.occurrenceGeneration == generation else { return }
+                self.occurrences = counts
+            }
         }
-        occurrences = counts
     }
 
-    static func transcriptTexts(in recordingsDirectory: URL, since: Date) -> [String] {
+    nonisolated static func transcriptTexts(in recordingsDirectory: URL, since: Date) -> [String] {
         let folders = (try? FileManager.default.contentsOfDirectory(
             at: recordingsDirectory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
         return folders.compactMap { folder in

@@ -72,8 +72,9 @@ nonisolated enum RecordingRecovery {
         return closed
     }
 
+    /// Both audio tracks are written continuously; frames only when the screen changes.
     private static func latestModification(in folder: URL) -> Date? {
-        let files = [folder.appending(path: "audio.m4a")]
+        let files = [folder.appending(path: "audio.m4a"), folder.appending(path: "mic.m4a")]
             + ((try? FileManager.default.contentsOfDirectory(
                 at: folder.appending(path: "frames"), includingPropertiesForKeys: nil)) ?? [])
         return files.compactMap {

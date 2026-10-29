@@ -91,6 +91,30 @@ struct MeetingRulesTests {
         #expect(signals.meetingWindow?.id == 11)
     }
 
+    @Test func customMeetBrowserIsDetectedInsteadOfBrave() {
+        let chrome = "com.google.Chrome"
+        let sources = SourceBundleIDs(meetBrowser: chrome)
+        let chromeMeet = SystemSnapshot(
+            runningBundleIDs: [chrome],
+            windows: [Fixture.window(7, chrome, "Meet – abc-defg-hij")],
+            audioProcesses: [Fixture.audio("com.google.Chrome.helper")],
+            sources: sources
+        )
+        let signals = MeetingRules.signals(for: .meet, in: chromeMeet)
+        #expect(signals.isMeeting)
+        #expect(signals.meetingWindow?.id == 7)
+        #expect(signals.audioOutputBundleIDs == ["com.google.Chrome.helper"])
+
+        // With Chrome configured, a Meet call in Brave is nobody's business.
+        var braveMeet = Fixture.meetSnapshot()
+        braveMeet.sources = sources
+        let ignored = MeetingRules.signals(for: .meet, in: braveMeet)
+        #expect(!ignored.isMeeting)
+        #expect(!ignored.isRunning)
+        #expect(ignored.meetingWindow == nil)
+        #expect(ignored.audioOutputBundleIDs.isEmpty)
+    }
+
     @Test func braveDiagnosticsOnlyListMeetTitles() {
         let snapshot = SystemSnapshot(
             runningBundleIDs: [Fixture.brave],

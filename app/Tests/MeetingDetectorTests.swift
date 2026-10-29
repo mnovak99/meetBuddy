@@ -109,6 +109,125 @@ struct MeetingDetectorTests {
         #expect(detector.state == .idle)
     }
 
+    // MARK: A meeting that is not recorded must not hide the next one
+
+    /// Lets the detector detect a Google Meet meeting at t=9 and returns the new session.
+    private func detectMeet(_ detector: inout MeetingDetector) throws -> MeetingSession {
+        let events = feed(&detector, Fixture.meetSnapshot(), at: [0, 9])
+        guard case .detected(let session) = try #require(events.first) else {
+            Issue.record("expected detection, got \(events)")
+            throw CancellationError()
+        }
+        return session
+    }
+
+    @Test func declinedCallIsReplacedByTheNextCall() throws {
+        var detector = MeetingDetector(settings: settings)
+        let session = try detectTeams(&detector)
+        _ = detector.decline(session.id)
+        // The declined call goes on, then its audio stops while the Teams window stays open.
+        #expect(feed(&detector, Fixture.teamsSnapshot(), at: [12, 30, 60]).isEmpty)
+        #expect(feed(&detector, Fixture.teamsSnapshot(audio: false), at: [63, 90, 120, 147]).isEmpty)
+        #expect(detector.state == .declined(session))
+
+        // A new call starts 90 s later: the old session closes, the new call is confirmed as usual.
+        #expect(feed(&detector, Fixture.teamsSnapshot(), at: [150]) == [.closed(session, .primaryGone)])
+        #expect(detector.state == .idle)
+        #expect(feed(&detector, Fixture.teamsSnapshot(), at: [153, 156]).isEmpty)
+        let events = feed(&detector, Fixture.teamsSnapshot(), at: [159])
+        guard case .detected(let next) = events.first else {
+            Issue.record("expected a new detection, got \(events)")
+            return
+        }
+        #expect(next.id != session.id)
+        #expect(next.detectedAt == at(159))
+    }
+
+    @Test func unansweredMeetingIsReplacedByTheNextOne() throws {
+        var detector = MeetingDetector(settings: settings)
+        let session = try detectTeams(&detector)  // never answered
+        #expect(feed(&detector, Fixture.teamsSnapshot(audio: false), at: [12, 30, 45]).isEmpty)
+        #expect(feed(&detector, Fixture.teamsSnapshot(), at: [48]) == [.closed(session, .primaryGone)])
+        #expect(feed(&detector, Fixture.teamsSnapshot(), at: [51, 54]).isEmpty)
+        #expect(feed(&detector, Fixture.teamsSnapshot(), at: [57]).count == 1)
+    }
+
+    @Test func newCallWindowAfterShortAudioGapIsTheNextCall() throws {
+        var detector = MeetingDetector(settings: settings)
+        let session = try detectTeams(&detector)
+        _ = detector.decline(session.id)
+        // Back-to-back calls: the audio is off for a single poll, then on again with a new call window.
+        _ = feed(&detector, Fixture.teamsSnapshot(audio: false), at: [12])
+        var nextCall = Fixture.teamsSnapshot()
+        nextCall.windows.append(Fixture.window(77, Fixture.teams, "Daily | Microsoft Teams"))
+        #expect(feed(&detector, nextCall, at: [15]) == [.closed(session, .primaryGone)])
+        #expect(feed(&detector, nextCall, at: [18, 21]).isEmpty)
+        let events = feed(&detector, nextCall, at: [24])
+        guard case .detected(let next) = events.first else {
+            Issue.record("expected a new detection, got \(events)")
+            return
+        }
+        #expect(next.windowID == 77)
+    }
+
+    @Test func chatWindowDuringDeclinedCallIsNotANewCall() throws {
+        var detector = MeetingDetector(settings: settings)
+        let session = try detectTeams(&detector)
+        _ = detector.decline(session.id)
+        // Teams opens a pop-out chat window while the call's audio goes on: still the same call.
+        var chat = Fixture.teamsSnapshot()
+        chat.windows.append(Fixture.window(77, Fixture.teams, "Chat with Petr | Microsoft Teams"))
+        #expect(feed(&detector, chat, at: [12, 30, 60, 120, 300]).isEmpty)
+        #expect(detector.state == .declined(session))
+    }
+
+    @Test func shortAudioDropoutKeepsTheDeclinedCall() throws {
+        var detector = MeetingDetector(settings: settings)
+        let session = try detectTeams(&detector)
+        _ = detector.decline(session.id)
+        // The audio stream closes for one poll (a device switch) and is back, same windows.
+        _ = feed(&detector, Fixture.teamsSnapshot(), at: [12])
+        _ = feed(&detector, Fixture.teamsSnapshot(audio: false), at: [15])
+        #expect(feed(&detector, Fixture.teamsSnapshot(), at: [18, 30, 60, 120]).isEmpty)
+        #expect(detector.state == .declined(session))
+    }
+
+    @Test func declinedMeetIsReplacedByAnotherMeeting() throws {
+        var detector = MeetingDetector(settings: settings)
+        let session = try detectMeet(&detector)
+        _ = detector.decline(session.id)
+        #expect(feed(&detector, Fixture.meetSnapshot(), at: [12, 60]).isEmpty)
+        // The same tab joins the next meeting: another title in the same window.
+        var next = Fixture.meetSnapshot()
+        next.windows = [Fixture.window(7, Fixture.brave, "Meet – xyz-next-one")]
+        #expect(feed(&detector, next, at: [63, 66, 69]).isEmpty)
+        // After confirmSeconds the old session closes and the new meeting is detected right away.
+        let events = feed(&detector, next, at: [72])
+        #expect(events.count == 2)
+        #expect(events.first == .closed(session, .primaryGone))
+        guard case .detected(let replacement) = events.last else {
+            Issue.record("expected a new detection, got \(events)")
+            return
+        }
+        #expect(replacement.windowTitle == "Meet – xyz-next-one")
+        #expect(replacement.windowID == 7)
+    }
+
+    @Test func briefLookAtAnotherMeetTabKeepsTheDeclinedMeeting() throws {
+        var detector = MeetingDetector(settings: settings)
+        let session = try detectMeet(&detector)
+        _ = detector.decline(session.id)
+        var other = Fixture.meetSnapshot()
+        other.windows = [Fixture.window(7, Fixture.brave, "Meet – xyz-next-one")]
+        #expect(feed(&detector, other, at: [12, 15]).isEmpty)
+        #expect(feed(&detector, Fixture.meetSnapshot(), at: [18, 60, 120]).isEmpty)
+        #expect(detector.state == .declined(session))
+        // Another look, not long enough either.
+        #expect(feed(&detector, other, at: [123, 129]).isEmpty)
+        #expect(feed(&detector, Fixture.meetSnapshot(), at: [132]).isEmpty)
+        #expect(detector.state == .declined(session))
+    }
+
     // MARK: End of a recorded meeting
 
     @Test func recordingEndsWhenWindowClosedAndAudioStops() throws {

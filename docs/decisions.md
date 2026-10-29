@@ -187,3 +187,47 @@ Technical findings that are not obvious from the code. Product decisions live in
   - `pipelinePath` → `MBPipelinePath` in Info.plist = `$(SRCROOT)/../pipeline` of the build.
   An existing `config.json` keeps its explicit values.
 - History rewritten to the GitHub noreply e-mail before publishing.
+
+## Revamp: core fixes (2026-10-29)
+
+### A declined meeting must not hide the next one
+- An unanswered or declined session used to live until its end timers fired; the next call only
+  refreshed them, so it was never offered. Now `MeetingDetector.isNewMeeting` closes such a
+  session (`closed`, reason `primaryGone`: its own primary signal went away first) and lets
+  `detectNewMeeting` run again:
+  - Google Meet: another Meet window (ID or title) is the meeting window for `confirmSeconds`.
+    The new meeting is a stable candidate by then and is detected in the same poll. A short look
+    at another Meet tab does not count. Known limit: a tab opened early for the next meeting and
+    then left again (both longer than `confirmSeconds`) asks about the declined meeting once more.
+  - Teams, Discord: window titles do not identify a call (chats and pop-outs open windows too),
+    so the audio decides: missing for `newMeetingGapSeconds` (15 s) and back, or missing at all
+    and a window newer than the session's exists (a new call window). A new window with
+    uninterrupted audio is not a new meeting. The candidate timer restarted during the gap, so the
+    new call is confirmed like any other.
+  - `EndReason` got no new case because `NotificationManager` switches over it exhaustively.
+
+### Audio stream layout (`AudioStreamLayout`)
+- Streams are told apart by terminal type: a tap has none (0), a microphone reports "micr" or
+  another type. When more than one stream reports 0 (virtual devices, some USB microphones), the
+  tap is the one with the tap's format (mono at the tap's sample rate); when that is not unique
+  either, the microphone is refused (`Mikrofon nejde rozlišit od zvuku meetingu…`) and the
+  aggregate device is rebuilt without it, so audio.m4a is always right.
+- mic.m4a is always mono (at 32 kbps one clean channel beats two thin ones): a non-interleaved
+  multi-channel microphone contributes channel 0 (its first buffer), an interleaved one is
+  averaged into a preallocated scratch buffer on the audio queue (no allocation in the IOProc).
+- Dropped IOProc buffers are counted (`Stats.droppedBuffers`, first one logged). After the
+  first minute `RecordingController.audioWarning` reports more than 1 % of them (gaps in the files).
+
+### Stopping the pipeline
+- `taskpolicy` execs `uv`; `uv` runs Python as a child. SIGTERM to `uv` alone need not reach
+  Python. `ProcessTree.terminate` signals the children first (libproc `proc_listchildpids`, the
+  same list as `pgrep -P`, without starting a process), then the parent, and sends SIGKILL to
+  survivors after 5 s. On quit the fallback only runs while the app is still alive; the recording
+  is resumed on the next launch anyway.
+
+### Vocabulary
+- `VocabularyStore.upsert` merges a new entry into an existing one with the same name (any case):
+  the id stays, new spelling/category win, aliases are merged, an empty description keeps the old
+  one, `inPrompt`/`autoReplace` stay on. Accepting a known suggestion no longer duplicates it.
+- Occurrences are counted in a detached task (files read off the main thread); the result of an
+  older refresh still running is dropped.

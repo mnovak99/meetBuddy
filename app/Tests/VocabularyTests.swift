@@ -131,6 +131,75 @@ struct VocabularyTests {
         #expect(reloaded.terms.map(\.term) == ["Grafana"])
     }
 
+    @Test func newTermWithAKnownNameUpdatesTheEntry() throws {
+        let folder = try temporaryDirectory()
+        let store = VocabularyStore(
+            vocabularyURL: folder.appending(path: "vocabulary.json"),
+            suggestionsURL: folder.appending(path: "suggestions.json"))
+        store.load()
+        store.upsert(VocabularyTerm(term: "Grafana", aliases: ["grafána"], description: "Dashboardy", autoReplace: true))
+        let id = store.terms[0].id
+
+        // "Přidat" with a term that exists already (other case, new alias, no description).
+        store.upsert(VocabularyTerm(term: "grafana", category: .product, aliases: ["gráfana", "Grafána"], inPrompt: true))
+
+        #expect(store.terms.count == 1)
+        #expect(store.terms[0].id == id)
+        #expect(store.terms[0].term == "grafana")
+        #expect(store.terms[0].category == .product)
+        #expect(store.terms[0].aliases == ["grafána", "gráfana"])
+        #expect(store.terms[0].description == "Dashboardy")
+        #expect(store.terms[0].inPrompt && store.terms[0].autoReplace)
+
+        // Editing the entry itself (same id) still replaces it as a whole.
+        var edited = store.terms[0]
+        edited.aliases = []
+        edited.autoReplace = false
+        store.upsert(edited)
+        #expect(store.terms.count == 1)
+        #expect(store.terms[0].aliases.isEmpty && !store.terms[0].autoReplace)
+    }
+
+    @Test func acceptingAKnownSuggestionDoesNotDuplicateIt() throws {
+        let folder = try temporaryDirectory()
+        let suggestions = folder.appending(path: "vocabulary-suggestions.json")
+        let json = #"""
+        {"schemaVersion": 1, "rejected": [], "suggestions": [
+          {"term": "Grafana", "heardAs": ["grafána"], "category": "product", "description": "Dashboardy", "source": "x", "addedAt": ""}
+        ]}
+        """#
+        try Data(json.utf8).write(to: suggestions)
+        let store = VocabularyStore(vocabularyURL: folder.appending(path: "vocabulary.json"), suggestionsURL: suggestions)
+        store.load()
+        store.upsert(VocabularyTerm(term: "grafana", aliases: ["gráfana"], inPrompt: false))
+
+        store.accept(store.suggestions[0])
+
+        #expect(store.terms.map(\.term) == ["Grafana"])
+        #expect(store.terms[0].aliases == ["gráfana", "grafána"])
+        #expect(store.terms[0].description == "Dashboardy")
+        #expect(store.suggestions.isEmpty)
+    }
+
+    @Test func occurrencesAreCountedInTheBackground() async throws {
+        let folder = try temporaryDirectory()
+        let recordings = folder.appending(path: "recordings")
+        let recording = recordings.appending(path: "2026-10-29_1000_x")
+        try FileManager.default.createDirectory(at: recording, withIntermediateDirectories: true)
+        let transcript = #"{"segments": [{"text": "Nasadíme Kubernetes."}, {"text": "kubernetes už běží"}]}"#
+        try Data(transcript.utf8).write(to: recording.appending(path: "transcript.json"))
+        let store = VocabularyStore(
+            vocabularyURL: folder.appending(path: "vocabulary.json"),
+            suggestionsURL: folder.appending(path: "suggestions.json"))
+        store.load()
+        store.upsert(VocabularyTerm(term: "Kubernetes"))
+        store.upsert(VocabularyTerm(term: "Jira"))
+
+        await store.refreshOccurrences(recordingsDirectory: recordings).value
+
+        #expect(store.occurrences == ["kubernetes": 2, "jira": 0])
+    }
+
     @Test func csvImportUpdatesExistingTerms() throws {
         let folder = try temporaryDirectory()
         let store = VocabularyStore(

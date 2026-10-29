@@ -16,6 +16,8 @@ final class RecordingController {
     private(set) var hasMicSignal = false
     /// Long digital silence while the app is playing: the audio permission is probably missing.
     private(set) var silenceSuspected = false
+    /// Audio lost on the way to the files (dropped buffers): the recording has gaps. Czech, for the UI.
+    private(set) var audioWarning: String?
     private(set) var windowUnavailable = false
 
     var frameCount: Int { meta.frames.count }
@@ -31,6 +33,10 @@ final class RecordingController {
     static let silenceWarningSeconds: TimeInterval = 120
     /// The audio device must deliver its first buffers within this time after the start.
     static let noAudioDataSeconds: TimeInterval = 10
+    /// Dropped buffers are judged only after this long: a few right after the start are normal.
+    static let droppedBuffersGraceSeconds: TimeInterval = 60
+    /// More than this share of dropped buffers is worth a warning.
+    static let droppedBuffersWarningRatio = 0.01
     static let micFile = "mic.m4a"
 
     /// Creates the recording folder and starts capturing. Throws only if the folder cannot be created;
@@ -102,6 +108,16 @@ final class RecordingController {
         if meta.audio.sampleRate == nil, let rate = stats.sampleRate {
             meta.audio.sampleRate = rate
             saveMeta()
+        }
+        // A steady loss of buffers (encoder not keeping up, unexpected stream layout) means gaps
+        // in the files; the user should know, once.
+        if audioWarning == nil, elapsedSeconds >= Self.droppedBuffersGraceSeconds, stats.buffersReceived > 0 {
+            let ratio = Double(stats.droppedBuffers) / Double(stats.buffersReceived)
+            if ratio > Self.droppedBuffersWarningRatio {
+                let percent = (ratio * 100).formatted(.number.precision(.fractionLength(0...1)))
+                audioWarning = "Část zvuku se nestihla uložit (\(percent) % bloků), v nahrávce mohou být výpadky."
+                Log.recording.notice("\(stats.droppedBuffers) of \(stats.buffersReceived) audio buffers dropped")
+            }
         }
         hasMicSignal = stats.lastMicSignalAt.map { now.timeIntervalSince($0) < 5 } ?? false
         let lastSignal = stats.lastSignalAt ?? meta.startedAt

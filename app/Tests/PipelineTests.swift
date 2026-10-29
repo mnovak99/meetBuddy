@@ -89,6 +89,55 @@ struct PipelineTests {
         #expect(fresh.arguments.suffix(2) == ["--force", "/tmp/recordings/x"])
     }
 
+    @Test func verboseFlagFollowsDebugLogging() {
+        let folder = URL(filePath: "/tmp/recordings/x")
+        var verbose = AppConfig()
+        verbose.debugLogging = true
+        #expect(PipelineCommand.make(folder: folder, config: verbose, environment: [:]).arguments.contains("--verbose"))
+        #expect(!PipelineCommand.make(folder: folder, config: AppConfig(), environment: [:]).arguments.contains("--verbose"))
+    }
+
+    @Test func threadsAndClaudeBackendComeFromTheApp() {
+        var config = AppConfig()
+        config.pipelineThreads = 3
+        let invocation = PipelineCommand.make(
+            folder: URL(filePath: "/tmp/recordings/x"), config: config,
+            environment: [
+                "HOME": "/Users/test", "EDITOR": "vim",
+                "ANTHROPIC_AUTH_TOKEN": "token", "CLAUDE_CODE_USE_BEDROCK": "1",
+            ])
+        #expect(invocation.environment["OMP_NUM_THREADS"] == "3")
+        #expect(invocation.environment["ANTHROPIC_AUTH_TOKEN"] == nil)
+        #expect(invocation.environment["CLAUDE_CODE_USE_BEDROCK"] == nil)
+        #expect(invocation.environment["EDITOR"] == "vim")
+    }
+
+    // MARK: ProcessTree
+
+    @Test(.timeLimit(.minutes(1))) func stubbornProcessTreeIsKilled() async throws {
+        // A shell that ignores SIGTERM, with a child (sleep) that inherits the ignored signal.
+        // The trailing echo keeps sh from turning into sleep (exec), so there really is a child.
+        let shell = Process()
+        shell.executableURL = URL(filePath: "/bin/sh")
+        shell.arguments = ["-c", "trap '' TERM; sleep 60; echo"]
+        try shell.run()
+        var children: [pid_t] = []
+        for _ in 0..<100 where children.isEmpty {
+            try await Task.sleep(for: .milliseconds(50))
+            children = ProcessTree.children(of: shell.processIdentifier)
+        }
+        #expect(children.count == 1)
+
+        ProcessTree.terminate(pid: shell.processIdentifier, killAfter: 0.5)
+
+        // SIGTERM is ignored by both; the SIGKILL fallback has to end them.
+        for _ in 0..<100 where shell.isRunning || children.contains(where: ProcessTree.isAlive) {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(!shell.isRunning)
+        #expect(!children.contains(where: ProcessTree.isAlive))
+    }
+
     @Test func runWithoutProgressCountsAsStalled() {
         let status = PipelineStatus(state: .transcribing, updatedAt: "2026-10-14T15:10:47+02:00", message: "Přepisuji 10/12")
         let updated = ISO8601DateFormatter().date(from: status.updatedAt)!
