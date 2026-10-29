@@ -13,7 +13,7 @@ struct ShortRecordingCard: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Krátký záznam (\(pending.meta.source.displayName), \(pending.meta.durationText))")
                             .font(.callout.weight(.medium))
-                        Text("Kratší než \(model.config.minDurationMinutes) min. Zahodit do Koše, nebo zpracovat?")
+                        Text("Kratší než \(Int(model.config.minDurationMinutes)) min. Zahodit do Koše, nebo zpracovat?")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

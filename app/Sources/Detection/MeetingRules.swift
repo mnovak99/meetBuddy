@@ -74,6 +74,12 @@ nonisolated enum MeetingRules {
         return ["Meet – ", "Meet - ", "Meet — "].contains { title.hasPrefix($0) }
     }
 
+    /// The meeting code in a Meet title ("Meet – abc-defg-hij" → "abc-defg-hij"), or nil.
+    static func meetCode(in title: String?) -> String? {
+        guard let title, let match = title.firstMatch(of: /[a-z]{3}-[a-z]{4}-[a-z]{3}/) else { return nil }
+        return String(match.output)
+    }
+
     static func presence(
         of session: MeetingSession, signals: SourceSignals, in snapshot: SystemSnapshot
     ) -> SessionPresence {

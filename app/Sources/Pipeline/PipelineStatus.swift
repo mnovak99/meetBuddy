@@ -56,9 +56,9 @@ nonisolated enum PipelineQueue {
     /// At launch: recordings that were queued, interrupted while processing (the Mac was shut
     /// down) or that still wait for their summary. Recordings without status.json are older than
     /// the pipeline integration and are left alone; failed ones are retried from the menu only.
-    static func shouldResume(_ status: PipelineStatus?) -> Bool {
+    static func shouldResume(_ status: PipelineStatus?, retrySummaries: Bool = true) -> Bool {
         guard let status else { return false }
-        return status.state == .queued || status.isInProgress || status.state == .needsSummary
+        return status.state == .queued || status.isInProgress || (retrySummaries && status.state == .needsSummary)
     }
 
     /// A run in progress whose status.json has not changed for `timeout`.
@@ -70,11 +70,11 @@ nonisolated enum PipelineQueue {
     }
 
     /// Recording folders to resume, oldest first (folder names start with the date).
-    static func pending(in recordingsDirectory: URL) -> [URL] {
+    static func pending(in recordingsDirectory: URL, retrySummaries: Bool = true) -> [URL] {
         let folders = (try? FileManager.default.contentsOfDirectory(
             at: recordingsDirectory, includingPropertiesForKeys: nil)) ?? []
         return folders
-            .filter { shouldResume(PipelineStatus.read(from: $0)) }
+            .filter { shouldResume(PipelineStatus.read(from: $0), retrySummaries: retrySummaries) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 }

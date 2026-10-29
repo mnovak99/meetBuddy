@@ -34,6 +34,8 @@ final class PipelineRunner {
     @ObservationIgnored private var stalled = false
     /// The app is quitting: a terminated run is not a failure.
     @ObservationIgnored private var isShuttingDown = false
+    /// Folders deleted while running: their end is not a failure and not a "last result".
+    @ObservationIgnored private var removed: Set<String> = []
 
     /// Without a status update for this long, a run counts as stuck. Every step reports progress
     /// well within it (one Whisper chunk, one Claude call, diarization of a long meeting).
@@ -98,14 +100,17 @@ final class PipelineRunner {
         if isProcessing(folder), let process, process.isRunning {
             Log.pipeline.notice("Stopping the pipeline, its recording is being deleted")
             rerunCurrent = nil
+            removed.insert(Self.key(folder))
             // uv and its Python child, SIGKILL for whatever ignores SIGTERM (see ProcessTree).
             ProcessTree.terminate(pid: process.processIdentifier)
         }
     }
 
-    /// At launch: continue with recordings that were queued or interrupted.
-    func resumePending() {
-        for folder in PipelineQueue.pending(in: RecordingFolder.recordingsDirectory) where !isQueued(folder) {
+    /// At launch: continue with recordings that were queued or interrupted. `retrySummaries`:
+    /// also those whose note still waits for a summary (needs Claude).
+    func resumePending(retrySummaries: Bool = true) {
+        let pending = PipelineQueue.pending(in: RecordingFolder.recordingsDirectory, retrySummaries: retrySummaries)
+        for folder in pending where !isQueued(folder) {
             queue.append(folder)
             Log.pipeline.notice("Resuming \(folder.lastPathComponent, privacy: .public)")
         }
@@ -141,8 +146,11 @@ final class PipelineRunner {
     /// Folder URLs come from different places (created by the app, listed from disk); compare
     /// their standardized paths rather than the URL strings.
     nonisolated static func same(_ a: URL, _ b: URL) -> Bool {
-        a.standardizedFileURL.path(percentEncoded: false).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            == b.standardizedFileURL.path(percentEncoded: false).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        key(a) == key(b)
+    }
+
+    nonisolated static func key(_ url: URL) -> String {
+        url.standardizedFileURL.path(percentEncoded: false).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
 
     private func startNextIfIdle() {
@@ -216,6 +224,12 @@ final class PipelineRunner {
         rerunCurrent = nil
         if isShuttingDown {
             Log.pipeline.notice("Pipeline stopped for \(folder.lastPathComponent, privacy: .public) (quitting)")
+            return
+        }
+        if removed.remove(Self.key(folder)) != nil {
+            // Deleted by the user while running: nothing to report, go on with the queue.
+            Log.pipeline.notice("Pipeline stopped for \(folder.lastPathComponent, privacy: .public) (deleted)")
+            startNextIfIdle()
             return
         }
         var status = PipelineStatus.read(from: folder)

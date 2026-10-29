@@ -48,7 +48,7 @@ struct VocabularyView: View {
             }
         }
         .confirmationDialog(
-            "Smazat \(selection.count == 1 ? "pojem" : "\(selection.count) pojmy") ze slovníku?",
+            "Smazat \(czechCount(selection.count, "pojem", "pojmy", "pojmů")) ze slovníku?",
             isPresented: $confirmDelete
         ) {
             Button("Smazat", role: .destructive) {

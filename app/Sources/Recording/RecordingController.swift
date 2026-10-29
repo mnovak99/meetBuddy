@@ -112,11 +112,17 @@ final class RecordingController {
         // A steady loss of buffers (encoder not keeping up, unexpected stream layout) means gaps
         // in the files; the user should know, once.
         if audioWarning == nil, elapsedSeconds >= Self.droppedBuffersGraceSeconds, stats.buffersReceived > 0 {
-            let ratio = Double(stats.droppedBuffers) / Double(stats.buffersReceived)
-            if ratio > Self.droppedBuffersWarningRatio {
-                let percent = (ratio * 100).formatted(.number.precision(.fractionLength(0...1)))
-                audioWarning = "Část zvuku se nestihla uložit (\(percent) % bloků), v nahrávce mohou být výpadky."
-                Log.recording.notice("\(stats.droppedBuffers) of \(stats.buffersReceived) audio buffers dropped")
+            let received = Double(stats.buffersReceived)
+            let appRatio = Double(stats.droppedBuffers) / received
+            let micRatio = Double(stats.droppedMicBuffers) / received
+            if appRatio > Self.droppedBuffersWarningRatio {
+                let percent = (appRatio * 100).formatted(.number.precision(.fractionLength(0...1)))
+                audioWarning = "Část zvuku meetingu se nestihla uložit (\(percent) % bloků), v nahrávce mohou být výpadky."
+                Log.recording.notice("\(stats.droppedBuffers) of \(stats.buffersReceived) app audio buffers dropped")
+            } else if micRatio > Self.droppedBuffersWarningRatio {
+                let percent = (micRatio * 100).formatted(.number.precision(.fractionLength(0...1)))
+                audioWarning = "Část zvuku z mikrofonu se nestihla uložit (\(percent) % bloků); zvuk meetingu je v pořádku."
+                Log.recording.notice("\(stats.droppedMicBuffers) of \(stats.buffersReceived) microphone buffers dropped")
             }
         }
         hasMicSignal = stats.lastMicSignalAt.map { now.timeIntervalSince($0) < 5 } ?? false

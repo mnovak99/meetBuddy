@@ -202,7 +202,7 @@ private struct StateCard: View {
             Banner(
                 tone: .warning,
                 title: "Krátký záznam: \(pending.meta.source.displayName), \(pending.meta.durationText)",
-                message: "Kratší než \(model.config.minDurationMinutes) min. Zahodit, nebo zpracovat?")
+                message: "Kratší než \(Int(model.config.minDurationMinutes)) min. Zahodit, nebo zpracovat?")
             HStack(spacing: 8) {
                 Button("Zahodit (do Koše)") { model.discardShortRecording(pending.id) }
                 Button("Ponechat") { model.keepShortRecording(pending.id) }

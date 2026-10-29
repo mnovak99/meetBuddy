@@ -193,7 +193,8 @@ struct StorageView: View {
             return
         }
         planning = true
-        defer { planning = false }
+        // A newer scan (the months changed) may be running when this one ends: leave its spinner on.
+        defer { if !Task.isCancelled { planning = false } }
         let notesFolder = model.config.notesFolder
         let plan = await Task.detached(priority: .utility) {
             NoteArchiver.plan(vault: vault, olderThan: cutoff, notesFolder: notesFolder)

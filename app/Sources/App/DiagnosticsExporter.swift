@@ -114,6 +114,20 @@ nonisolated enum DiagnosticsExporter {
         return lines.joined(separator: "\n") + "\n"
     }
 
+    /// meta.json without personal data: the calendar attendees and organizer are dropped
+    /// (names and e-mails of other people); titles, timing and device info stay for diagnosis.
+    static func redactedMeta(from source: URL) throws -> Data {
+        let data = try Data(contentsOf: source)
+        // Not JSON (a damaged file): copied as it is, that is what the diagnosis is for.
+        guard var object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return data }
+        if var calendar = object["calendar"] as? [String: Any] {
+            calendar["attendees"] = (calendar["attendees"] as? [Any]).map { "\($0.count) účastníků (vynecháno)" }
+            calendar["organizer"] = nil
+            object["calendar"] = calendar
+        }
+        return try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+    }
+
     /// Copies the allowed files of the newest recordings into `<target>/<folder name>/`.
     @discardableResult
     static func copyRecordingFiles(from recordingsDirectory: URL, into target: URL, count: Int = recordingCount) throws -> [String] {
@@ -129,7 +143,11 @@ nonisolated enum DiagnosticsExporter {
                 guard manager.fileExists(atPath: source.path(percentEncoded: false)) else { continue }
                 let destinationFolder = target.appending(path: folder.lastPathComponent)
                 try manager.createDirectory(at: destinationFolder, withIntermediateDirectories: true)
-                try manager.copyItem(at: source, to: destinationFolder.appending(path: name))
+                if name == "meta.json" {
+                    try redactedMeta(from: source).write(to: destinationFolder.appending(path: name))
+                } else {
+                    try manager.copyItem(at: source, to: destinationFolder.appending(path: name))
+                }
                 copied.append("recordings/\(folder.lastPathComponent)/\(name)")
             }
         }

@@ -92,7 +92,9 @@ final class AppModel {
         for folder in RecordingRecovery.closeInterrupted(in: RecordingFolder.recordingsDirectory) {
             pipeline.enqueue(folder, start: false)
         }
-        pipeline.resumePending()
+        // Notes waiting for a summary are retried only when `claude` exists: otherwise every
+        // launch would fail them again and notify about it.
+        pipeline.resumePending(retrySummaries: AppConfig.resolvedClaudePath() != nil)
 
         Task {
             await permissions.start(requestMicrophone: config.recordMicrophone)
@@ -144,7 +146,8 @@ final class AppModel {
             startPolling()
         }
         // The microphone was switched on later: ask for the permission now, not at the next launch.
-        if newConfig.recordMicrophone, !previous.recordMicrophone || pollTask == nil,
+        // (At launch `permissions.start` asks, after the other prompts.)
+        if newConfig.recordMicrophone, !previous.recordMicrophone, pollTask != nil,
            permissions.microphoneStatus == .undetermined {
             Task { await permissions.requestMicrophoneAccess() }
         }
@@ -180,9 +183,15 @@ final class AppModel {
         checkStorage(notify: false)
     }
 
-    /// Updates the storage warning; `notify`: also post a notification when over the limit.
+    /// Rescans the recordings (in the background) and then updates the storage warning;
+    /// `notify`: also post a notification when over the limit.
     func checkStorage(notify: Bool) {
-        library.reload()
+        library.reload { [weak self] in
+            self?.updateStorageStatus(notify: notify)
+        }
+    }
+
+    private func updateStorageStatus(notify: Bool) {
         let limit = Int64(config.storageLimitGB * 1_000_000_000)
         expiredAudioCount = library.expiredAudio(retentionDays: config.audioRetentionDays).count
         if library.totalBytes > limit {
@@ -202,8 +211,17 @@ final class AppModel {
     // MARK: - User choices (from notifications, the panel or the window)
 
     func record(_ sessionID: UUID) {
-        // A recording is still being closed (or runs): never start a second one over it.
-        guard recording == nil, finishTask == nil else { return ignoreStale("Ano") }
+        // The previous recording is still being closed: answer again once it is done, so the
+        // click is not lost (the detector keeps the question open meanwhile).
+        if let finishTask {
+            Task { [weak self] in
+                await finishTask.value
+                self?.record(sessionID)
+            }
+            return
+        }
+        // Never start a second recording over a running one.
+        guard recording == nil else { return ignoreStale("Ano") }
         guard detector.accept(sessionID, now: .now) else { return ignoreStale("Ano") }
         Log.detection.notice("User chose: record")
         finishChoice(sessionID)

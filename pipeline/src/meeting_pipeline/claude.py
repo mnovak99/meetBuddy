@@ -101,7 +101,12 @@ def run_claude(
         structured = output.get("structured_output")
         if not output.get("is_error") and isinstance(structured, dict):
             return structured
-        last_error = f"{output.get('subtype')}: {str(output.get('result'))[:300]}"
+        if output.get("is_error"):
+            # An error message from the CLI (usage limit, not logged in): useful to show.
+            last_error = f"{output.get('subtype')}: {str(output.get('result'))[:300]}"
+        else:
+            # The answer did not match the schema: never copy model output into status/log.
+            last_error = f"{output.get('subtype')}: odpověď nebyla ve správném formátu"
         log.warning("Claude attempt %d failed: %s", attempt, output.get("subtype"))
     raise ClaudeError(last_error)
 

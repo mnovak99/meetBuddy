@@ -300,8 +300,14 @@ nonisolated struct MeetingDetector {
     ) -> Bool {
         switch session.source {
         case .meet:
+            // Another window, or another meeting code in the title. A renamed tab of the same
+            // window (join screen → call, presenting) keeps the meeting code, so it is the same
+            // meeting; a title without a code is never taken as a different meeting.
+            let sessionCode = MeetingRules.meetCode(in: session.windowTitle)
             guard let window = signals.meetingWindow,
-                  window.id != session.windowID || window.title != session.windowTitle
+                  window.id != session.windowID
+                    || (sessionCode != nil && MeetingRules.meetCode(in: window.title) != nil
+                        && MeetingRules.meetCode(in: window.title) != sessionCode)
             else {
                 otherMeetWindowSince = nil
                 return false
@@ -311,8 +317,11 @@ nonisolated struct MeetingDetector {
             return now.timeIntervalSince(since) >= settings.confirmSeconds
         case .teams, .discord:
             guard let primaryGap else { return false }
+            // A newer window shortens the required gap, but a single missed poll (a device
+            // switch, a hiccup) plus a chat pop-out must not count as a new call.
             let newerWindow = signals.meetingWindow.map { $0.id > (session.windowID ?? 0) } ?? false
-            return primaryGap >= settings.newMeetingGapSeconds || newerWindow
+            return primaryGap >= settings.newMeetingGapSeconds
+                || (newerWindow && primaryGap >= settings.newMeetingGapSeconds / 2)
         }
     }
 

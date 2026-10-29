@@ -45,6 +45,14 @@ Sekci `[Unreleased]` doplňuj průběžně; `scripts/release.sh` z ní při vyd�
 - Nahrávání mikrofonu: stopa je vždy mono, vícekanálové mikrofony se nesmíchají se zvukem meetingu; když mikrofon nejde od zvuku meetingu rozlišit, nahraje se jen zvuk meetingu a appka to řekne. Výpadky při ukládání zvuku se hlásí v panelu i v Přehledu.
 - Přidání pojmu, který ve slovníku už je (i s jinou velikostí písmen), ho sloučí místo zdvojení; počítání výskytů v přepisech už neblokuje okno.
 - Ukončení pipeline zastaví i její podprocesy (uv, Python, claude) a po 5 s dorazí SIGKILL tomu, co SIGTERM ignoruje.
+- Smazání právě zpracovávané nahrávky už nehlásí falešné selhání a nenabízí „Zkusit znovu“ na smazané složce.
+- „Zpracovat znovu“ se u hotové poznámky nenabízí (vznikala by kopie „(2)“); pro změnu slovníku je „Přepsat znovu od začátku“.
+- Když Claude selže při opakovaném čištění po změně jména nebo slovníku, zůstane předchozí čištění i shrnutí místo poznámky jen s přepisem.
+- Google Meet: přejmenování záložky v téže schůzce (připojení, sdílení) už nevyvolá novou otázku „Nahrávat?“; nová schůzka = jiné okno nebo jiný kód schůzky. Teams a Discord: krátký výpadek zvuku plus nové okno chatu už není nový hovor.
+- Zvuk meetingu se ukládá ve formátu, který skutečně dodává virtuální zařízení (při mikrofonu s jinou vzorkovací frekvencí byl dřív špatně rychlý). Výpadky se počítají zvlášť pro zvuk meetingu a mikrofon.
+- Kliknutí na „Nahrávat“ během dokončování předchozí nahrávky se neztratí, provede se hned potom. Oprávnění k mikrofonu se při prvním spuštění nežádá dvakrát.
+- Seznam nahrávek se načítá na pozadí, okno při stovkách nahrávek nezamrzá. Export diagnostiky vynechává účastníky z kalendáře; chybová hláška Clauda už neobsahuje text jeho odpovědi.
+- Poznámky čekající na shrnutí se po startu zkoušejí znovu jen tehdy, když je nainstalovaný `claude`.
 
 ### Odstraněno
 - Tlačítko pro vydání na GitHubu a self-hosted runner: u veřejného repa by cizí kód mohl běžet na Macu.

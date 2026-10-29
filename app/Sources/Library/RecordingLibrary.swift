@@ -38,6 +38,9 @@ nonisolated struct RecordingItem: Identifiable, Sendable {
 @Observable
 final class RecordingLibrary {
     private(set) var items: [RecordingItem] = []
+    /// A scan is running (the first one shows a spinner in the lists).
+    private(set) var isScanning = false
+    @ObservationIgnored private var generation = 0
 
     @ObservationIgnored let directory: URL
 
@@ -49,8 +52,28 @@ final class RecordingLibrary {
         items.reduce(0) { $0 + $1.sizes.total }
     }
 
-    func reload() {
+    /// Scans the recordings folder in the background (it walks every folder, including the
+    /// frames) and publishes `items` when done; `completion` then runs on the main actor.
+    /// When several reloads overlap, only the newest one publishes.
+    func reload(completion: (@MainActor () -> Void)? = nil) {
+        generation += 1
+        let current = generation
+        let directory = directory
+        isScanning = true
+        Task { [weak self] in
+            let scanned = await Task.detached(priority: .userInitiated) { Self.scan(directory) }.value
+            guard let self, current == self.generation else { return }
+            self.items = scanned
+            self.isScanning = false
+            completion?()
+        }
+    }
+
+    /// Scans right away, on the calling thread (tests and small folders).
+    func reloadNow() {
+        generation += 1
         items = Self.scan(directory)
+        isScanning = false
     }
 
     func expiredAudio(retentionDays: Int, now: Date = .now) -> [RecordingItem] {
@@ -84,7 +107,7 @@ final class RecordingLibrary {
 
     // MARK: - Pure helpers
 
-    static func scan(_ directory: URL) -> [RecordingItem] {
+    nonisolated static func scan(_ directory: URL) -> [RecordingItem] {
         let folders = (try? FileManager.default.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: [.isDirectoryKey])) ?? []
         return folders
@@ -101,7 +124,7 @@ final class RecordingLibrary {
             .sorted { $0.folder.lastPathComponent > $1.folder.lastPathComponent }  // newest first
     }
 
-    static func expiredAudio(in items: [RecordingItem], retentionDays: Int, now: Date) -> [RecordingItem] {
+    nonisolated static func expiredAudio(in items: [RecordingItem], retentionDays: Int, now: Date) -> [RecordingItem] {
         let limit = now.addingTimeInterval(-Double(retentionDays) * 24 * 3600)
         return items.filter { item in
             guard item.hasAudio, let end = item.meta?.endedAt ?? item.meta?.startedAt else { return false }
@@ -109,7 +132,7 @@ final class RecordingLibrary {
         }
     }
 
-    static func sizes(of folder: URL) -> RecordingItem.Sizes {
+    nonisolated static func sizes(of folder: URL) -> RecordingItem.Sizes {
         var sizes = RecordingItem.Sizes()
         let keys: [URLResourceKey] = [.totalFileAllocatedSizeKey, .isRegularFileKey]
         guard let enumerator = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: keys) else {

@@ -156,13 +156,14 @@ struct MeetingDetectorTests {
         var detector = MeetingDetector(settings: settings)
         let session = try detectTeams(&detector)
         _ = detector.decline(session.id)
-        // Back-to-back calls: the audio is off for a single poll, then on again with a new call window.
-        _ = feed(&detector, Fixture.teamsSnapshot(audio: false), at: [12])
+        // Back-to-back calls: the audio is off for two polls (a single missed poll could be a
+        // hiccup), then on again with a new call window.
+        _ = feed(&detector, Fixture.teamsSnapshot(audio: false), at: [12, 15])
         var nextCall = Fixture.teamsSnapshot()
         nextCall.windows.append(Fixture.window(77, Fixture.teams, "Daily | Microsoft Teams"))
-        #expect(feed(&detector, nextCall, at: [15]) == [.closed(session, .primaryGone)])
-        #expect(feed(&detector, nextCall, at: [18, 21]).isEmpty)
-        let events = feed(&detector, nextCall, at: [24])
+        #expect(feed(&detector, nextCall, at: [18]) == [.closed(session, .primaryGone)])
+        #expect(feed(&detector, nextCall, at: [21, 24]).isEmpty)
+        let events = feed(&detector, nextCall, at: [27])
         guard case .detected(let next) = events.first else {
             Issue.record("expected a new detection, got \(events)")
             return

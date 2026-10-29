@@ -17,8 +17,8 @@ extension AppModel {
         if let section {
             windowSection = section
         }
-        windowOpeners?.main(windowSection)
-        NSApp.activate()
+        let section = windowSection
+        withOpeners { $0.main(section) }
     }
 
     /// Shows a recording in Nahrávky.
@@ -32,8 +32,24 @@ extension AppModel {
         if let tab {
             settingsTab = tab
         }
-        windowOpeners?.settings(settingsTab)
-        NSApp.activate()
+        let tab = settingsTab
+        withOpeners { $0.settings(tab) }
+    }
+
+    /// The actions are registered when the menu bar icon first appears. A notification clicked
+    /// right at launch can come earlier: retry for a few seconds instead of doing nothing.
+    private func withOpeners(attempt: Int = 0, _ action: @escaping ((main: (WindowSection) -> Void, settings: (SettingsTab) -> Void)) -> Void) {
+        if let windowOpeners {
+            action(windowOpeners)
+            NSApp.activate()
+        } else if attempt < 10 {
+            Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(500))
+                self?.withOpeners(attempt: attempt + 1, action)
+            }
+        } else {
+            Log.app.error("Window actions were never registered; cannot open the window")
+        }
     }
 
     /// A menu bar app has no Dock icon; while a window is open it gets one (and ⌘Tab).

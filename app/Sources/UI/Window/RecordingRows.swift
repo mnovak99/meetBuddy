@@ -141,15 +141,18 @@ struct RecordingActions {
     }
 
     var notePath: String? { item.note?.notePath }
-    /// "Zpracovat znovu": needs the audio, unless only the summary is missing.
-    var canContinue: Bool { !busy && (item.hasAudio || item.status?.state == .needsSummary) }
+    /// "Zpracovat znovu": only for unfinished runs (a finished note would be written again as
+    /// "(2)"); needs the audio, unless only the summary is missing.
+    var canContinue: Bool {
+        !busy && item.status?.state != .done && (item.hasAudio || item.status?.state == .needsSummary)
+    }
     /// "Přepsat znovu od začátku": always needs the audio.
     var canRestart: Bool { !busy && item.hasAudio }
     var canDelete: Bool { !busy }
 
     static let continueHelp =
         "Pokračuje tam, kde zpracování skončilo: hotový přepis zůstane, doplní se jen chybějící kroky "
-        + "(třeba shrnutí, když Claude narazil na limit)."
+        + "(třeba shrnutí, když Claude narazil na limit). U hotové poznámky použij „Přepsat znovu od začátku“."
     static let restartHelp =
         "Zahodí přepis, jména i shrnutí a zpracuje nahrávku znovu od zvuku, třeba po úpravě slovníku. "
         + "Potřebuje zvuk na disku."

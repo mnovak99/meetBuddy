@@ -32,6 +32,14 @@ EXIT_USAGE = 2
 EXIT_TERMINATED = 128 + signal.SIGTERM  # 143, like a process killed by SIGTERM
 
 
+def _write_failed(recording_dir: Path, error: str) -> None:
+    """Final status after a failure; the folder may be gone (deleted in the app meanwhile)."""
+    try:
+        write_status(recording_dir, State.FAILED, error=error)
+    except OSError as exc:
+        log.error("Cannot write the final status: %s", exc)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="meeting-pipeline",
@@ -102,23 +110,23 @@ def process(recording: Recording, config: Config, *, force: bool) -> int:
             )
     except (AudioError, ModelError, NoteError) as exc:
         log.error("Processing of %s failed: %s", recording_dir.name, exc)
-        write_status(recording_dir, State.FAILED, error=str(exc))
+        _write_failed(recording_dir, str(exc))
         return EXIT_FAILED
     except PermissionError as exc:
         # macOS protects ~/Documents: the app must be allowed to access it (System Settings).
         log.error("No permission: %s", exc)
-        write_status(
-            recording_dir, State.FAILED,
-            error=f"Chybí oprávnění k souboru {exc.filename}: povol Meeting Assistant přístup "
+        _write_failed(
+            recording_dir,
+            f"Chybí oprávnění k souboru {exc.filename}: povol Meeting Buddy přístup "
             "ke složce Dokumenty (Nastavení systému → Soukromí a zabezpečení → Soubory a složky).",
-        )  # fmt: skip
+        )
         return EXIT_FAILED
     except Exception as exc:
         # Anything else (a damaged file, a library error): the app must see a failure instead of
         # a run that looks stuck. SystemExit from the SIGTERM handler is not an Exception and
         # passes through, leaving the in-progress status behind on purpose.
         log.exception("Processing of %s failed", recording_dir.name)
-        write_status(recording_dir, State.FAILED, error=f"{type(exc).__name__}: {exc}")
+        _write_failed(recording_dir, f"{type(exc).__name__}: {exc}")
         return EXIT_FAILED
 
     if claude_error:

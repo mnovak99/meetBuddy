@@ -13,7 +13,7 @@ from pathlib import Path
 from string import Template
 from typing import Any
 
-from meeting_pipeline.claude import ClaudeRunner
+from meeting_pipeline.claude import ClaudeError, ClaudeRunner
 from meeting_pipeline.config import Config
 from meeting_pipeline.files import read_json, write_json
 from meeting_pipeline.recording import Recording
@@ -235,11 +235,12 @@ def clean(
     cached = _cached_lines(cache, fingerprint)
     if cached is not None:
         return cached
-    if cache.is_file():
-        # Made with another user name or vocabulary: the names and corrections are redone, and
-        # so is the summary built on them.
+    # Made with another user name or vocabulary: the names and corrections are redone, and so
+    # is the summary built on them. The old result is kept until the new one exists, so a Claude
+    # failure now (usage limit) does not throw a finished note away.
+    stale = _cached_lines(cache, {}) if cache.is_file() else None
+    if stale is not None:
         log.info("%s was made with other settings; cleaning again", CLEANED_FILE)
-        (recording.folder / SUMMARY_FILE).unlink(missing_ok=True)
 
     spelled = plain_lines(segments, recording, config, terms)
     transcript = "\n".join(
@@ -253,7 +254,15 @@ def clean(
         vocabulary=vocabulary_text(terms),
         transcript=transcript,
     )
-    result = runner(prompt, CLEAN_SCHEMA, cwd=recording.folder, allowed_tools=())
+    try:
+        result = runner(prompt, CLEAN_SCHEMA, cwd=recording.folder, allowed_tools=())
+    except ClaudeError:
+        if stale is not None:
+            log.warning("Claude not available; keeping the cleanup made with the previous settings")
+            return stale
+        raise
+    if stale is not None:
+        (recording.folder / SUMMARY_FILE).unlink(missing_ok=True)
 
     names = speaker_names(result)
     corrections = {

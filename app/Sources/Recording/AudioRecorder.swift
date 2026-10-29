@@ -57,7 +57,10 @@ nonisolated final class AudioRecorder: @unchecked Sendable {
         var lastMicSignalAt: Date?
         /// IOProc calls whose audio did not reach a file (encoder busy, unexpected buffer layout):
         /// each one is a gap in the recording. `RecordingController` warns when there are too many.
+        /// IOProc calls whose app buffer could not be written (encoder busy, layout mismatch).
         var droppedBuffers = 0
+        /// The same for the microphone buffer.
+        var droppedMicBuffers = 0
         var sampleRate: Double?
     }
 
@@ -157,9 +160,15 @@ nonisolated final class AudioRecorder: @unchecked Sendable {
         aggregateDevice = device
         guard let tapIndex = layout.tapStreamIndex else { throw RecorderError.tapStreamNotFound }
 
+        // The IOProc delivers the aggregate device's streams, which run at the clock device's
+        // rate (the tap is resampled into it), so the writer takes that format, not `tap.format`.
+        var appFormatDescription = try aggregate.inputStreams[tapIndex].virtualFormat
+        guard let appFormat = AVAudioFormat(streamDescription: &appFormatDescription) else {
+            throw RecorderError.unsupportedFormat
+        }
         appTrack = Track(
-            bufferIndex: layout.bufferIndex(ofStream: tapIndex), format: tapFormat, downmix: nil,
-            writer: try AACFileWriter(url: appFileURL, inputFormat: tapFormat, bitRate: bitRate))
+            bufferIndex: layout.bufferIndex(ofStream: tapIndex), format: appFormat, downmix: nil,
+            writer: try AACFileWriter(url: appFileURL, inputFormat: appFormat, bitRate: bitRate))
         if let microphone, micDevice != nil, let micIndex = layout.microphoneStreamIndex {
             micTrack = try makeMicrophoneTrack(
                 description: aggregate.inputStreams[micIndex].virtualFormat,
@@ -169,7 +178,7 @@ nonisolated final class AudioRecorder: @unchecked Sendable {
                 microphoneDeviceName = nil
             }
         }
-        stats.withLock { $0.sampleRate = tapFormat.sampleRate }
+        stats.withLock { $0.sampleRate = appFormat.sampleRate }
 
         // The IOProc: Core Audio calls this block on `queue` for every chunk of audio (~10 ms).
         var procID: AudioDeviceIOProcID?
@@ -179,7 +188,7 @@ nonisolated final class AudioRecorder: @unchecked Sendable {
         guard status == noErr, let procID else { throw RecorderError.ioProcNotCreated(status) }
         ioProcID = procID
         try device.start(IOProcID: procID)
-        Log.audio.notice("Audio recording started, \(tapFormat.sampleRate) Hz, microphone: \(self.micTrack == nil ? "no" : "yes", privacy: .public)")
+        Log.audio.notice("Audio recording started, \(appFormat.sampleRate) Hz, microphone: \(self.micTrack == nil ? "no" : "yes", privacy: .public)")
     }
 
     /// Stops capturing and finishes the files. Safe to call more than once.
@@ -262,18 +271,24 @@ nonisolated final class AudioRecorder: @unchecked Sendable {
             throw RecorderError.aggregateDeviceNotCreated
         }
         // Input streams in channel order = the order of their buffers in the IOProc's list.
-        let inputStreams = try device.streams
-            .filter { (try? $0.direction) == .input }
-            .sorted { ((try? $0.startingChannel) ?? 0) < ((try? $1.startingChannel) ?? 0) }
-        let descriptions = try inputStreams.map { stream in
-            let format = try stream.virtualFormat
-            return AudioStreamLayout.Stream(
-                terminalType: try stream.terminalType,
-                channels: Int(format.mChannelsPerFrame),
-                isNonInterleaved: format.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0,
-                sampleRate: format.mSampleRate)
+        // If inspecting them fails, the device just created must not be left behind.
+        do {
+            let inputStreams = try device.streams
+                .filter { (try? $0.direction) == .input }
+                .sorted { ((try? $0.startingChannel) ?? 0) < ((try? $1.startingChannel) ?? 0) }
+            let descriptions = try inputStreams.map { stream in
+                let format = try stream.virtualFormat
+                return AudioStreamLayout.Stream(
+                    terminalType: try stream.terminalType,
+                    channels: Int(format.mChannelsPerFrame),
+                    isNonInterleaved: format.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0,
+                    sampleRate: format.mSampleRate)
+            }
+            return (device, inputStreams, AudioStreamLayout(streams: descriptions, tapSampleRate: tapSampleRate))
+        } catch {
+            try? system.destroyAggregateDevice(device)
+            throw error
         }
-        return (device, inputStreams, AudioStreamLayout(streams: descriptions, tapSampleRate: tapSampleRate))
     }
 
     /// The configured microphone, or nil (with `microphoneProblem` set) when it cannot be used.
@@ -373,13 +388,15 @@ nonisolated final class AudioRecorder: @unchecked Sendable {
         let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: inputData))
         let app = appTrack.map { write(buffers, track: $0) }
         let mic = micTrack.map { write(buffers, track: $0) }
-        let dropped = app?.written == false || mic?.written == false
+        let appDropped = app?.written == false
+        let micDropped = mic?.written == false
         let firstDrop = stats.withLock { stats -> Bool in
             stats.buffersReceived += 1
             if app?.hasSignal == true { stats.lastSignalAt = Date() }
             if mic?.hasSignal == true { stats.lastMicSignalAt = Date() }
-            if dropped { stats.droppedBuffers += 1 }
-            return dropped && stats.droppedBuffers == 1
+            if appDropped { stats.droppedBuffers += 1 }
+            if micDropped { stats.droppedMicBuffers += 1 }
+            return (appDropped || micDropped) && stats.droppedBuffers + stats.droppedMicBuffers == 1
         }
         // Logged once; the count goes on in the stats and RecordingController warns when it grows.
         if firstDrop {
