@@ -168,6 +168,8 @@ struct RecordingDetailView: View {
         }
     }
 
+    /// Primary actions as labelled buttons; the processing actions and deletion live in a menu,
+    /// so the bar fits even when the detail pane is narrow.
     private var actionBar: some View {
         let actions = actions
         return HStack(spacing: 8) {
@@ -183,19 +185,27 @@ struct RecordingDetailView: View {
             Button {
                 NSWorkspace.shared.open(item.folder)
             } label: {
-                Label("Otevřít složku", systemImage: "folder")
+                Label("Složka", systemImage: "folder")
             }
             .help("Složka s nahrávkou ve Finderu")
             Spacer()
-            Button("Zpracovat znovu") { model.reprocess(item, fromScratch: false) }
-                .disabled(!actions.canContinue)
-                .help(RecordingActions.continueHelp)
-            Button("Přepsat znovu od začátku") { model.reprocess(item, fromScratch: true) }
-                .disabled(!actions.canRestart)
-                .help(RecordingActions.restartHelp)
-            Button("Smazat…", role: .destructive, action: onDelete)
-                .disabled(!actions.canDelete)
-                .help(RecordingActions.deleteHelp)
+            Menu {
+                Button("Zpracovat znovu") { model.reprocess(item, fromScratch: false) }
+                    .disabled(!actions.canContinue)
+                    .help(RecordingActions.continueHelp)
+                Button("Přepsat znovu od začátku") { model.reprocess(item, fromScratch: true) }
+                    .disabled(!actions.canRestart)
+                    .help(RecordingActions.restartHelp)
+                Divider()
+                Button("Smazat…", role: .destructive, action: onDelete)
+                    .disabled(!actions.canDelete)
+                    .help(RecordingActions.deleteHelp)
+            } label: {
+                Label("Zpracování", systemImage: "arrow.triangle.2.circlepath")
+            }
+            .menuStyle(.button)
+            .fixedSize()
+            .help("Zpracovat znovu, přepsat od začátku nebo smazat")
         }
     }
 

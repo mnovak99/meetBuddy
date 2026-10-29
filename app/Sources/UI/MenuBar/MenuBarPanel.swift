@@ -29,3 +29,7 @@ struct MenuBarPanel: View {
         .frame(width: Theme.panelWidth)
     }
 }
+
+#Preview("Panel – idle") {
+    MenuBarPanel(model: AppModel())
+}

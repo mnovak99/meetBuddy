@@ -474,3 +474,8 @@ private struct DiagnosticsSection: View {
         .padding(.horizontal, 4)
     }
 }
+
+#Preview("Přehled") {
+    OverviewView(model: AppModel())
+        .frame(width: 760, height: 640)
+}

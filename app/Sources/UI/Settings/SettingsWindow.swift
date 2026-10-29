@@ -35,3 +35,7 @@ struct SettingsWindow: View {
         }
     }
 }
+
+#Preview("Nastavení") {
+    SettingsWindow(model: AppModel())
+}

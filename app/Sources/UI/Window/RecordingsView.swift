@@ -134,3 +134,8 @@ struct RecordingsView: View {
         model.selectedRecording = first.folder
     }
 }
+
+#Preview("Nahrávky") {
+    RecordingsView(model: AppModel())
+        .frame(width: 900, height: 600)
+}

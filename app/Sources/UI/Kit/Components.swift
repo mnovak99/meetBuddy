@@ -74,10 +74,13 @@ struct Banner: View {
                     Text(message).font(.caption).foregroundStyle(.secondary)
                 }
             }
+            // Wrap long texts instead of truncating them; the button keeps its full title.
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
                     .controlSize(.small)
+                    .fixedSize()
             }
         }
         .padding(12)

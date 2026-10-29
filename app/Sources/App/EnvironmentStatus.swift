@@ -100,7 +100,7 @@ extension AppModel {
             case .granted: (.ok, "Povoleno", nil)
             case .unknown: (.info, permission.purpose, nil)
             case .notDetermined: (.warning, "Zatím nepovoleno. " + permission.purpose, "Povolit…")
-            case .denied: (.error, "Nepovoleno. " + permission.purpose, "Otevřít Nastavení systému…")
+            case .denied: (.error, "Nepovoleno. " + permission.purpose, "Nastavení systému…")
             case .needsRestart: (.warning, "Povoleno, projeví se po restartu appky.", "Restartovat appku")
             }
             items.append(HealthItem(
