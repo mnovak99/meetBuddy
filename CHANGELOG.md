@@ -41,6 +41,10 @@ Sekci `[Unreleased]` doplňuj průběžně; `scripts/release.sh` z ní při vyd�
 - Když selže jen shrnutí, poznámka si nechá jména mluvčích a opravy z čištění.
 - Volání `claude` ignoruje všechny proměnné `ANTHROPIC_*` a `CLAUDE_CODE_*` a nespouští MCP servery uživatele.
 - Slovníkový pojem s obráceným lomítkem už neshodí automatickou opravu.
+- Odmítnutý nebo nezodpovězený meeting už neblokuje detekci dalšího hovoru (nový hovor po pauze ve zvuku nebo nové okno Meet se nabídne k nahrávání).
+- Nahrávání mikrofonu: stopa je vždy mono, vícekanálové mikrofony se nesmíchají se zvukem meetingu; když mikrofon nejde od zvuku meetingu rozlišit, nahraje se jen zvuk meetingu a appka to řekne. Výpadky při ukládání zvuku se hlásí v panelu i v Přehledu.
+- Přidání pojmu, který ve slovníku už je (i s jinou velikostí písmen), ho sloučí místo zdvojení; počítání výskytů v přepisech už neblokuje okno.
+- Ukončení pipeline zastaví i její podprocesy (uv, Python, claude) a po 5 s dorazí SIGKILL tomu, co SIGTERM ignoruje.
 
 ### Odstraněno
 - Tlačítko pro vydání na GitHubu a self-hosted runner: u veřejného repa by cizí kód mohl běžet na Macu.

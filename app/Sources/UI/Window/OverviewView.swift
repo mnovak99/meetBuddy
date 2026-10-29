@@ -151,6 +151,9 @@ private struct StateCard: View {
                 tone: .warning, title: "Nahrává se jen ticho",
                 message: "Aplikace hraje, ale nahrávka je tichá. Zkontroluj oprávnění Nahrávání obrazovky a systémového zvuku v Nastavení systému.")
         }
+        if let warning = recording.audioWarning {
+            Banner(tone: .warning, title: "Výpadky ve zvuku", message: warning)
+        }
         if let error = recording.meta.microphone?.error {
             Banner(tone: .warning, title: "Mikrofon se nenahrává", message: error)
         }

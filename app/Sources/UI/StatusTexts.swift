@@ -80,6 +80,9 @@ extension RecordingController {
         if silenceSuspected {
             return "⚠️ Zvuk: jen ticho, zkontroluj oprávnění Systémový zvuk"
         }
+        if let audioWarning {
+            return "⚠️ Zvuk: \(audioWarning)"
+        }
         return hasAudioSignal ? "Zvuk: nahrává se ✓" : "Zvuk: zatím ticho"
     }
 

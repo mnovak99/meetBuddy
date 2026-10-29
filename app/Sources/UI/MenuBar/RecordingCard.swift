@@ -103,6 +103,9 @@ struct RecordingCard: View {
         } else if recording.silenceSuspected {
             problem("Nahrává se jen ticho: zkontroluj oprávnění Systémový zvuk.", tone: .error)
         }
+        if let warning = recording.audioWarning {
+            problem(warning, tone: .warning)
+        }
         if let error = recording.meta.microphone?.error {
             problem("Mikrofon: \(error)", tone: .warning)
         }

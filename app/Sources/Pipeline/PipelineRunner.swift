@@ -123,7 +123,7 @@ final class PipelineRunner {
            let process, process.isRunning, !stalled {
             Log.pipeline.error("Pipeline stalled at \(status.message ?? "?", privacy: .public), stopping it")
             stalled = true
-            process.terminate()
+            ProcessTree.terminate(pid: process.processIdentifier)
         }
     }
 
