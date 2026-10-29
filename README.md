@@ -10,7 +10,7 @@ Zpracování běží lokálně na Macu. Jediná služba mimo něj je Claude, kte
 
 ## Co umí
 
-- **Pozná meeting** v Microsoft Teams, Google Meet v Brave a v Discordu podle běžící appky, titulku okna a zvuku. Meeting nemusí být v popředí.
+- **Pozná meeting** v Microsoft Teams, Google Meet v prohlížeči (Brave, Chrome, Edge, Arc, Vivaldi nebo Opera) a v Discordu podle běžící appky, titulku okna a zvuku. Meeting nemusí být v popředí.
 - **Nikdy nenahrává bez potvrzení:** notifikace „Nahrávat?“ (Ano / Ne), případně ruční start z menu.
 - **Nahrává:**
   - zvuk jen meeting appky (`audio.m4a`), ne celého systému,
@@ -22,11 +22,13 @@ Zpracování běží lokálně na Macu. Jediná služba mimo něj je Claude, kte
   - přepis Whisperem large-v3-turbo (čeština, slovenština a angličtina se poznávají po úsecích),
   - Claude přiřadí jména, opraví pojmy podle slovníku a napíše poznámku.
 - **Poznámka v Obsidianu:** shrnutí, klíčové body, rozhodnutí, moje úkoly, úkoly ostatních, otevřené otázky, kde padlo moje jméno, sdílený obsah se snímky a celý přepis. Tvoje úkoly se navíc přidají do `Meetings/Moje úkoly.md`.
+- **Panel v menu baru:** stav, živý čas nahrávání, signál zvuku a mikrofonu, počet snímků, otázky Nahrávat? / Ukončit?, průběh zpracování a varování s tlačítky, které rovnou otevřou správné místo.
 - **Okno appky:**
+  - **Přehled**: stav, zpracování, obsazení úložiště, checklist připravenosti (oprávnění, vault, token, Claude, uv a pipeline, start po přihlášení) a poslední nahrávky,
+  - **Nahrávky**: seznam s hledáním a detail každé nahrávky (shrnutí, přepis, snímky, podrobnosti a log zpracování),
   - **Slovník** pojmů, které model komolí, s návrhy po každém meetingu,
-  - **Přehled** nahrávek,
-  - **Nastavení**,
-  - **Úložiště** s úklidem starého audia a archivací poznámek.
+  - **Úložiště** s rozpadem podle druhu dat, úklidem starého audia a archivací poznámek.
+- **Nastavení** (⌘,) v samostatném okně se záložkami Obecné, Detekce, Nahrávání, Notifikace, AI, Úložiště a Pokročilé; každá změna se uloží hned.
 
 ## Jak to funguje
 
@@ -100,7 +102,7 @@ Obě části si předávají soubory v `~/Library/Application Support/MeetingAss
    | Mikrofon | povolit |
    | Systémový zvuk | ptá se při prvním nahrávání |
    | složka Dokumenty | může se zeptat při prvním zápisu poznámky, pokud je tam vault |
-8. **Nastavení:** v menu → **Otevřít Meeting Buddy…** → Nastavení vyber Obsidian vault (bez něj poznámky nevzniknou) a zapni **Spouštět po přihlášení**. Ostatní má rozumné výchozí hodnoty:
+8. **Nastavení:** klikni na ducha v menu baru → **Nastavení…** (⌘,) → Obecné: vyber Obsidian vault (bez něj poznámky nevzniknou) a zapni **Spouštět po přihlášení**. Co ještě chybí, ukáže checklist **Připravenost** v okně → Přehled. Ostatní má rozumné výchozí hodnoty:
    - jméno = křestní jméno z účtu na Macu (podle něj Claude pozná tvoje úkoly),
    - mikrofon = výchozí vstup systému, nahrávání mikrofonu jde vypnout,
    - `uv` a pipeline se najdou samy.
@@ -114,13 +116,14 @@ Na [Releases](https://github.com/mnovak99/meetBuddy/releases) je `MeetingBuddy-X
 - **Duch v menu baru:**
   - bez tečky = čeká na meeting,
   - **oranžová** tečka = meeting detekován, čeká na odpověď,
-  - **červená** = nahrává.
+  - **červená** = nahrává (volitelně i s časem vedle ikony: Nastavení → Pokročilé).
+- **Panel:** kliknutím na ducha. Nahoře stav a čas, pak karta podle situace (Nahrávat? / Ukončit nahrávání / Nahrávat ručně), zpracování, varování a dole Přehled, Nahrávky, Slovník, Nastavení… (⌘,) a Ukončit (⌘Q).
 - **Průběh:**
-  1. Začne meeting a přijde notifikace „Nahrávat?“ → **Ano**.
-  2. Na konci **Ukončit** (z notifikace „Meeting pravděpodobně skončil“ nebo z menu).
-  3. Pipeline poběží na pozadí, v menu je vidět průběh.
-  4. Přijde notifikace **„Poznámka je hotová“**, kliknutím se otevře v Obsidianu.
-- **Ruční nahrávání:** menu → Nahrávat ručně → Teams / Brave / Discord.
+  1. Začne meeting a přijde notifikace „Nahrávat?“ → **Ano** (nebo v panelu **Nahrávat**).
+  2. Na konci **Ukončit** (z notifikace „Meeting pravděpodobně skončil“ nebo z panelu). V Nastavení → Detekce jde zapnout automatické ukončení, když po pravděpodobném konci nikdo neodpoví.
+  3. Pipeline poběží na pozadí, v panelu i v Přehledu je vidět průběh. Dokud běží nahrávání, zpracování čeká (jde vypnout); volitelně počká, až Mac pár minut nepoužíváš.
+  4. Přijde notifikace **„Poznámka je hotová“**, kliknutím se otevře v Obsidianu. Shrnutí, přepis a snímky jsou vidět i v okně → Nahrávky.
+- **Ruční nahrávání:** panel → Nahrávat ručně → Teams / prohlížeč / Discord.
 - Nahrávky kratší než 5 minut appka nabídne zahodit. Všechno mazání jde do Koše a vždy s potvrzením.
 
 ### Slovník
@@ -136,7 +139,21 @@ Slovník obsahuje jména kolegů a zákazníků, zkratky, produkty a termíny, k
 | **Do promptu** | Whisper ten pojem dostane předem. Jen pro vzácná slova, prompt má místo zhruba na 200 tokenů (ukazatel nahoře) |
 | **Automaticky opravovat** | chybné tvary se nahradí hned po přepisu. Vypni, pokud je chybný tvar zároveň běžné slovo |
 
-Po každém meetingu navrhne Claude pojmy, které Whisper nepoznal. Najdeš je nahoře ve Slovníku a vybereš **Přijmout**, **Upravit…** (třeba doplnit význam) nebo **Zamítnout** (zamítnuté se nevrátí). Slovník jde exportovat do CSV, upravit v Numbers nebo Excelu a importovat zpátky. Po úpravě slovníku dej u nahrávky v Přehledu **Přepsat znovu od začátku**.
+Po každém meetingu navrhne Claude pojmy, které Whisper nepoznal. Najdeš je nahoře ve Slovníku a vybereš **Přijmout**, **Upravit…** (třeba doplnit význam) nebo **Zamítnout** (zamítnuté se nevrátí). Slovník jde exportovat do CSV, upravit v Numbers nebo Excelu a importovat zpátky. Po úpravě slovníku dej u nahrávky v okně → Nahrávky **Přepsat znovu od začátku**.
+
+### Nastavení
+
+| Záložka | Co tam je |
+|---|---|
+| **Obecné** | jméno, Obsidian vault, start po přihlášení, přehled oprávnění s tlačítky Povolit / Otevřít Nastavení systému |
+| **Detekce** | hlídané aplikace, prohlížeč pro Google Meet, doba potvrzení, pravděpodobný konec, interval kontroly, automatické ukončení bez odpovědi |
+| **Nahrávání** | mikrofon a jeho výběr, zahození krátkých nahrávek, interval, rozměr a citlivost snímků |
+| **Notifikace** | zvuk a jednotlivé druhy notifikací („Nahrávat?“ a chyby se zobrazují vždy) |
+| **AI** | jazyky přepisu, model Whisperu a Clauda, přepis do poznámky, „Moje úkoly.md“, složka poznámek, vlákna CPU, nezpracovávat během nahrávání, čekat na nečinnost Macu, token Hugging Face |
+| **Úložiště** | kdy nabídnout smazání audia, limit místa |
+| **Pokročilé** | ikona v menu baru, čas vedle ikony, podrobné logování, otevření logů, export diagnostiky, cesty k pipeline a `uv`, znovunačtení `config.json`, restart |
+
+Všechno se ukládá do `config.json` hned po změně; soubor jde dál upravovat i ručně (Pokročilé → Znovu načíst).
 
 ## Vývoj
 
@@ -189,12 +206,13 @@ Vydává se jen z Macu autora, GitHub Actions se nepoužívají (podpisový klí
 | Nahrává se jen ticho | Nastavení systému → Soukromí a zabezpečení → Nahrávání obrazovky a systémového zvuku → povolit Meeting Buddy |
 | Poznámka „bez rozlišení mluvčích“ | potvrď podmínky modelu pyannote na Hugging Face (odkaz výše), v Přehledu pak „Přepsat znovu od začátku“ |
 | Poznámka „jen s přepisem“ | Claude nebyl dostupný (limit, odhlášení); appka to zkusí znovu po startu, nebo dej „Zkusit znovu“ |
-| Zpracování selhalo | Přehled → pravým tlačítkem na nahrávku → Otevřít složku → `pipeline.log` |
+| Zpracování selhalo | okno → Nahrávky → detail → Podrobnosti (konec logu) nebo Otevřít log |
+| Něco nefunguje a nevíš co | okno → Přehled → Připravenost; Nastavení → Pokročilé → Exportovat diagnostiku (zip s logy a nastavením, bez přepisů a zvuku) |
 | Po buildu se ztratila oprávnění | appka nebyla podepsaná identitou „MeetingAssistant Dev“ (`codesign -dv /Applications/MeetingBuddy.app`) |
 
 ## Stav
 
-Hotové kroky 1–4: detekce, nahrávání, pipeline a GUI. Další je ladění podle ostrého provozu. Podrobnosti jsou v [`CHANGELOG.md`](CHANGELOG.md) a [`docs/decisions.md`](docs/decisions.md).
+Hotové kroky 1–4: detekce, nahrávání, pipeline a GUI, plus přestavba UI (panel v menu baru, okno s detailem nahrávek, Nastavení se záložkami). Další je ladění podle ostrého provozu. Podrobnosti jsou v [`CHANGELOG.md`](CHANGELOG.md) a [`docs/decisions.md`](docs/decisions.md).
 
 Je to osobní projekt: issues a pull requesty můžou zůstat bez odpovědi.
 
