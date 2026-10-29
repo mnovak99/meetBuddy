@@ -270,3 +270,32 @@ through `stages.default_components(config)`.
   one, `inPrompt`/`autoReplace` stay on. Accepting a known suggestion no longer duplicates it.
 - Occurrences are counted in a detached task (files read off the main thread); the result of an
   older refresh still running is dropped.
+
+## Revamp: UI and settings (2026-10-29)
+
+- Menu bar: `MenuBarExtra` with `.menuBarExtraStyle(.window)` shows a SwiftUI panel (340 pt) instead of a
+  native menu. Keyboard shortcuts (⌘, and ⌘Q) work while the panel is key. The panel re-renders on every
+  poll, so its views only read model state (no file system work in `body`).
+- Windows are opened from the model (`AppModel+Windows`): the menu bar label view exists for the whole life
+  of the app, so it registers SwiftUI's `openWindow` / `openSettings` actions in `onAppear` and the model
+  stores them as closures. Any window root calls `windowAppeared()` / `windowDisappeared()`: while a
+  window is open the app is `.regular` (Dock icon, ⌘Tab), otherwise `.accessory`.
+- Settings: a `Settings` scene with a `TabView` (7 tabs). No Save button: every control writes through
+  `AppModel.updateConfig`, which sanitises, writes config.json atomically and applies the change (detector
+  settings, pipeline, notification preferences, verbose logging, microphone permission request).
+  Text fields commit on Return or focus loss, so clamping does not fight typing.
+- The Meet browser is configurable: `SourceBundleIDs` is captured into every `SystemSnapshot` and the
+  session stores its `appBundleID`, so detector, recorder and tests agree on the bundle IDs. Only
+  Chromium browsers are offered (their audio comes from `<bundleID>.helper`); Safari and Firefox play
+  audio from processes with unrelated bundle IDs.
+- Pipeline gate: `PipelineRunner.gate` returns why the queue must wait (recording in progress when
+  `pauseProcessingWhileRecording`, Mac in use when `idleBeforeProcessingMinutes` > 0, measured with
+  `CGEventSource.secondsSinceLastEventType(.combinedSessionState, kCGAnyInputEventType)`); the queue is
+  retried on every poll.
+- Health checklist (`AppModel.healthItems`): permissions, vault, Hugging Face token, `claude`, `uv` and
+  the pipeline folder, login item. Tool and token checks run off the main thread (`EnvironmentStatus`)
+  and are refreshed when a window opens or paths change, not on every poll. A permission that was never
+  asked for gets "Povolit…" (the system prompt); a denied one opens System Settings.
+- `#Preview` blocks exist for the panel, Přehled, Nahrávky and Nastavení; they use a plain `AppModel()`
+  (nothing is started) and read the real Application Support folder, which is handy for layout checks
+  with Xcode's preview canvas or the Xcode MCP `RenderPreview` tool.
