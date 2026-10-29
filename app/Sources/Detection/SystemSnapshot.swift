@@ -10,6 +10,8 @@ nonisolated struct SystemSnapshot: Equatable, Sendable {
     var windows: [WindowInfo]
     /// Processes of the watched apps that are connected to Core Audio.
     var audioProcesses: [AudioProcessInfo]
+    /// Which app stood for each source when the snapshot was taken.
+    var sources = SourceBundleIDs()
 }
 
 nonisolated struct WindowInfo: Equatable, Sendable {

@@ -1,31 +1,7 @@
 import AppKit
 import SwiftUI
 
-enum WindowSection: String, CaseIterable, Identifiable {
-    case vocabulary, overview, settings, storage
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .vocabulary: "Slovník"
-        case .overview: "Přehled"
-        case .settings: "Nastavení"
-        case .storage: "Úložiště"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .vocabulary: "character.book.closed"
-        case .overview: "list.bullet.rectangle"
-        case .settings: "gearshape"
-        case .storage: "internaldrive"
-        }
-    }
-}
-
-/// The app window: a sidebar with the sections. Opened from the menu bar.
+/// The main window: a sidebar with the sections. Opened from the menu bar panel.
 struct MainWindow: View {
     static let id = "main"
 
@@ -39,27 +15,29 @@ struct MainWindow: View {
             )) {
                 ForEach(WindowSection.allCases) { section in
                     Label(section.title, systemImage: section.icon)
-                        .badge(section == .vocabulary ? model.vocabulary.suggestions.count : 0)
+                        .badge(badge(for: section))
                         .tag(section)
                 }
             }
-            .navigationSplitViewColumnWidth(min: 170, ideal: 190)
+            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
         } detail: {
             switch model.windowSection {
-            case .vocabulary: VocabularyView(store: model.vocabulary)
             case .overview: OverviewView(model: model)
-            case .settings: SettingsView(model: model)
+            case .recordings: RecordingsView(model: model)
+            case .vocabulary: VocabularyView(store: model.vocabulary)
             case .storage: StorageView(model: model)
             }
         }
-        .frame(minWidth: 940, minHeight: 580)
-        // A menu bar app has no Dock icon; while the window is open it gets one (and ⌘Tab).
-        .onAppear {
-            NSApp.setActivationPolicy(.regular)
-            NSApp.activate()
-        }
-        .onDisappear {
-            NSApp.setActivationPolicy(.accessory)
+        .frame(minWidth: 960, minHeight: 600)
+        .onAppear { model.windowAppeared() }
+        .onDisappear { model.windowDisappeared() }
+    }
+
+    private func badge(for section: WindowSection) -> Int {
+        switch section {
+        case .vocabulary: model.vocabulary.suggestions.count
+        case .overview: model.healthItems.filter(\.isProblem).count
+        default: 0
         }
     }
 }

@@ -5,6 +5,8 @@ import Foundation
 nonisolated struct MeetingSession: Equatable, Sendable, Identifiable {
     let id: UUID
     let source: MeetingSource
+    /// The app's main bundle ID at detection time (the Meet browser is configurable).
+    var appBundleID: String
     let detectedAt: Date
     var windowID: CGWindowID?
     var windowTitle: String?
@@ -23,7 +25,7 @@ nonisolated enum DetectorState: Equatable, Sendable {
     case detected(MeetingSession)
     /// The user chose not to record; do not ask again until this meeting ends.
     case declined(MeetingSession)
-    /// The user chose to record. Step 1: simulated, nothing is captured yet.
+    /// The user chose to record.
     case recording(MeetingSession)
 
     var session: MeetingSession? {
@@ -73,7 +75,7 @@ nonisolated extension DetectorSettings {
     init(config: AppConfig) {
         self.init(
             confirmSeconds: config.detectionConfirmSeconds,
-            endGraceSeconds: 30,
+            endGraceSeconds: config.endGraceSeconds,
             endSilenceSeconds: config.endSilenceMinutes * 60,
             enabledSources: config.enabledSources
         )
@@ -87,6 +89,8 @@ nonisolated struct MeetingDetector {
     private(set) var state: DetectorState = .idle
     /// Latest signals of every source (for the menu and the log).
     private(set) var signals: [MeetingSource: SourceSignals] = [:]
+    /// Bundle IDs of the last snapshot (for sessions started by hand).
+    private(set) var sources = SourceBundleIDs()
 
     /// Since when each source has continuously looked like a meeting.
     private var candidateSince: [MeetingSource: Date] = [:]
@@ -102,6 +106,7 @@ nonisolated struct MeetingDetector {
 
     /// Feed one poll. Returns what happened, for the app to react to (notifications, logs).
     mutating func process(_ snapshot: SystemSnapshot, now: Date) -> [DetectorEvent] {
+        sources = snapshot.sources
         for source in MeetingSource.allCases {
             signals[source] = MeetingRules.signals(for: source, in: snapshot)
         }
@@ -115,7 +120,7 @@ nonisolated struct MeetingDetector {
 
     // MARK: User answers. Each returns false if the answer is stale (the meeting is gone).
 
-    /// "Ano": start (simulated) recording.
+    /// "Ano": start recording.
     mutating func accept(_ id: UUID, now: Date) -> Bool {
         guard case .detected(var session) = state, session.id == id else { return false }
         session.acceptedAt = now
@@ -146,8 +151,8 @@ nonisolated struct MeetingDetector {
     mutating func startManual(source: MeetingSource, window: WindowInfo?, now: Date) -> MeetingSession? {
         if case .recording = state { return nil }
         let session = MeetingSession(
-            id: UUID(), source: source, detectedAt: now, windowID: window?.id, windowTitle: window?.title,
-            acceptedAt: now, isManual: true)
+            id: UUID(), source: source, appBundleID: sources.bundleID(for: source), detectedAt: now,
+            windowID: window?.id, windowTitle: window?.title, acceptedAt: now, isManual: true)
         state = .recording(session)
         lastPrimaryAt = now
         lastAnySignalAt = now
@@ -199,7 +204,8 @@ nonisolated struct MeetingDetector {
 
             let window = signals[source]?.meetingWindow
             let session = MeetingSession(
-                id: UUID(), source: source, detectedAt: now, windowID: window?.id, windowTitle: window?.title)
+                id: UUID(), source: source, appBundleID: sources.bundleID(for: source), detectedAt: now,
+                windowID: window?.id, windowTitle: window?.title)
             state = .detected(session)
             lastPrimaryAt = now
             lastAnySignalAt = now

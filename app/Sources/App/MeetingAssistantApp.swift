@@ -7,21 +7,27 @@ struct MeetingAssistantApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        // MenuBarExtra = the icon in the menu bar. The `.menu` style renders the content
-        // as a native drop-down menu (buttons, texts, dividers, submenus).
+        // MenuBarExtra = the icon in the menu bar. The `.window` style shows our own SwiftUI panel
+        // below the icon instead of a native drop-down menu.
         MenuBarExtra {
-            MenuContent(model: appDelegate.model)
+            MenuBarPanel(model: appDelegate.model)
         } label: {
             MenuBarIcon(model: appDelegate.model)
         }
-        .menuBarExtraStyle(.menu)
+        .menuBarExtraStyle(.window)
 
-        // The app window (Slovník, Přehled, Nastavení, Úložiště); opened from the menu only.
+        // The main window (Přehled, Nahrávky, Slovník, Úložiště); opened from the panel only.
         Window("Meeting Buddy", id: MainWindow.id) {
             MainWindow(model: appDelegate.model)
         }
         .defaultLaunchBehavior(.suppressed)
         .restorationBehavior(.disabled)
+        .defaultSize(width: 1040, height: 680)
+
+        // Nastavení (⌘,): a separate window with tabs, as macOS apps have it.
+        Settings {
+            SettingsWindow(model: appDelegate.model)
+        }
     }
 }
 

@@ -16,4 +16,18 @@ nonisolated enum Log {
     static let permissions = Logger(subsystem: subsystem, category: "permissions")
     static let pipeline = Logger(subsystem: subsystem, category: "pipeline")
     static let recording = Logger(subsystem: subsystem, category: "recording")
+
+    /// `debugLogging` in config.json: debug-level messages (detection signals every poll) are
+    /// logged at info level, so `log show` keeps them. Written at config load on the main thread;
+    /// the flag is plain data, so an unsynchronised read elsewhere can only see old or new.
+    nonisolated(unsafe) static var verbose = false
+
+    /// Logs at debug level, or at info level when verbose logging is on.
+    static func trace(_ logger: Logger, _ message: String) {
+        if verbose {
+            logger.info("\(message, privacy: .public)")
+        } else {
+            logger.debug("\(message, privacy: .public)")
+        }
+    }
 }

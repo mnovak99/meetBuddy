@@ -1,6 +1,26 @@
 import Foundation
 import UserNotifications
 
+/// Which notifications the user wants (Nastavení → Notifikace). "Nahrávat?" and failures are
+/// always shown: without them the app cannot do its job.
+nonisolated struct NotificationPreferences: Equatable, Sendable {
+    var sound = true
+    var meetingEnded = true
+    var noteReady = true
+    var storage = true
+    var recordingProblems = true
+
+    init() {}
+
+    init(config: AppConfig) {
+        sound = config.notificationSound
+        meetingEnded = config.notifyMeetingEnded
+        noteReady = config.notifyNoteReady
+        storage = config.notifyStorage
+        recordingProblems = config.notifyRecordingProblems
+    }
+}
+
 /// Posts the "Nahrávat?" and "Meeting skončil?" notifications and reports the user's choice.
 ///
 /// How actions work in UserNotifications: buttons are defined once as a `UNNotificationCategory`
@@ -11,10 +31,17 @@ final class NotificationManager: NSObject {
         case record, dontRecord, stop, keepRecording, discardShortRecording, keepShortRecording
     }
 
+    /// What an informational notification is about, so the preferences can switch it off.
+    enum InfoKind {
+        case recordingProblem, storage, general
+    }
+
     /// Called on the main thread when the user picks an action in one of our notifications.
     var onChoice: ((Choice, UUID) -> Void)?
     /// Called when the user clicks a "note ready" notification (absolute path of the note).
     var onOpenNote: ((String) -> Void)?
+
+    var preferences = NotificationPreferences()
 
     private let center = UNUserNotificationCenter.current()
 
@@ -85,18 +112,18 @@ final class NotificationManager: NSObject {
     }
 
     func postMeetingDetected(_ session: MeetingSession) {
-        let content = UNMutableNotificationContent()
+        let content = makeContent()
         content.title = "Detekován meeting v \(session.source.displayName) – nahrávat?"
         content.body = session.windowTitle.map { "Okno: \($0)" } ?? "Název okna není k dispozici."
-        content.sound = .default
         content.categoryIdentifier = ID.detectedCategory
         content.userInfo = [ID.sessionKey: session.id.uuidString]
         post(content, identifier: Self.detectedIdentifier(session.id))
     }
 
     func postMeetingProbablyEnded(_ session: MeetingSession, reason: EndReason, endSilenceMinutes: Double) {
+        guard preferences.meetingEnded else { return }
         let name = session.source.displayName
-        let content = UNMutableNotificationContent()
+        let content = makeContent()
         content.title = "Meeting v \(name) pravděpodobně skončil"
         let minutes = endSilenceMinutes.formatted()
         let why = switch reason {
@@ -107,7 +134,6 @@ final class NotificationManager: NSObject {
             : "\(name) už \(minutes) min nehraje zvuk."
         }
         content.body = "\(why) Ukončit nahrávání?"
-        content.sound = .default
         content.categoryIdentifier = ID.endedCategory
         content.userInfo = [ID.sessionKey: session.id.uuidString]
         post(content, identifier: Self.endedIdentifier(session.id))
@@ -116,44 +142,48 @@ final class NotificationManager: NSObject {
     /// A finished recording is shorter than `minDurationMinutes`: offer to discard it.
     func postShortRecording(_ meta: RecordingMeta) {
         let minutes = Int(((meta.durationSeconds ?? 0) / 60).rounded(.up))
-        let content = UNMutableNotificationContent()
+        let content = makeContent()
         content.title = "Záznam z \(meta.source.displayName) má jen \(minutes) min – zahodit?"
         content.body = "Zahozený záznam se přesune do Koše. Bez odpovědi zůstane uložený."
-        content.sound = .default
         content.categoryIdentifier = ID.shortCategory
         content.userInfo = [ID.sessionKey: meta.id.uuidString]
-        post(content, identifier: "short-\(meta.id.uuidString)")
+        post(content, identifier: Self.shortIdentifier(meta.id))
     }
 
     /// Plain information without buttons (window not capturable, silent audio, errors).
-    func postInfo(title: String, body: String, identifier: String) {
-        let content = UNMutableNotificationContent()
+    func postInfo(title: String, body: String, identifier: String, kind: InfoKind = .general) {
+        switch kind {
+        case .recordingProblem where !preferences.recordingProblems: return
+        case .storage where !preferences.storage: return
+        default: break
+        }
+        let content = makeContent()
         content.title = title
         content.body = body
-        content.sound = .default
         post(content, identifier: identifier)
     }
 
     /// The pipeline finished a recording: note ready, note without summary, or failure.
     func postPipelineFinished(folderName: String, status: PipelineStatus?, notePath: String?) {
-        let content = UNMutableNotificationContent()
+        let content = makeContent()
         let noteName = notePath.map { URL(filePath: $0).deletingPathExtension().lastPathComponent }
         switch status?.state {
         case .done:
+            guard preferences.noteReady else { return }
             content.title = "Poznámka je hotová"
             content.body = "\(noteName ?? folderName) – kliknutím ji otevřeš v Obsidianu."
             if let warning = status?.error {
                 content.body += " ⚠️ \(warning)"
             }
         case .needsSummary:
+            guard preferences.noteReady else { return }
             content.title = "Poznámka zatím jen s přepisem"
             content.body = "Claude nebyl dostupný. Shrnutí doplním při příštím spuštění appky "
-                + "nebo po „Zkusit znovu“ v menu."
+                + "nebo po „Zkusit znovu“."
         default:
             content.title = "Zpracování nahrávky selhalo"
             content.body = status?.error ?? "Neznámá chyba, podrobnosti v pipeline.log."
         }
-        content.sound = .default
         if let notePath {
             content.userInfo = [ID.notePathKey: notePath]
         }
@@ -162,7 +192,7 @@ final class NotificationManager: NSObject {
 
     /// Removes notifications of a meeting that is over, so nobody answers a stale question.
     func removeNotifications(for sessionID: UUID) {
-        let ids = [Self.detectedIdentifier(sessionID), Self.endedIdentifier(sessionID), "short-\(sessionID.uuidString)"]
+        let ids = [Self.detectedIdentifier(sessionID), Self.endedIdentifier(sessionID), Self.shortIdentifier(sessionID)]
         center.removeDeliveredNotifications(withIdentifiers: ids)
         center.removePendingNotificationRequests(withIdentifiers: ids)
     }
@@ -171,6 +201,13 @@ final class NotificationManager: NSObject {
 
     private static func detectedIdentifier(_ id: UUID) -> String { "detected-\(id.uuidString)" }
     private static func endedIdentifier(_ id: UUID) -> String { "ended-\(id.uuidString)" }
+    private static func shortIdentifier(_ id: UUID) -> String { "short-\(id.uuidString)" }
+
+    private func makeContent() -> UNMutableNotificationContent {
+        let content = UNMutableNotificationContent()
+        content.sound = preferences.sound ? .default : nil
+        return content
+    }
 
     private func post(_ content: UNMutableNotificationContent, identifier: String) {
         // trigger nil = deliver immediately.

@@ -50,7 +50,7 @@ final class RecordingController {
         let initialMeta = RecordingMeta(
             id: session.id,
             source: session.source,
-            appBundleID: session.source.appBundleID,
+            appBundleID: session.appBundleID,
             manual: session.isManual,
             startedAt: startedAt,
             window: session.windowID.map { RecordingMeta.Window(id: $0, title: session.windowTitle) },

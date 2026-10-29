@@ -31,13 +31,14 @@ nonisolated struct SessionPresence: Equatable, Sendable {
 /// Detection rules. Pure functions of a snapshot, so they are easy to test.
 nonisolated enum MeetingRules {
     static func signals(for source: MeetingSource, in snapshot: SystemSnapshot) -> SourceSignals {
-        let audio = snapshot.audioProcesses.filter { source.owns(bundleID: $0.bundleID) }
+        let sources = snapshot.sources
+        let audio = snapshot.audioProcesses.filter { sources.owns($0.bundleID, source: source) }
         let titledWindows = snapshot.windows.filter {
-            source.owns(bundleID: $0.ownerBundleID) && !($0.title ?? "").isEmpty
+            sources.owns($0.ownerBundleID, source: source) && !($0.title ?? "").isEmpty
         }
 
         var signals = SourceSignals()
-        signals.isRunning = snapshot.runningBundleIDs.contains(source.appBundleID)
+        signals.isRunning = snapshot.runningBundleIDs.contains(sources.bundleID(for: source))
         signals.audioOutputBundleIDs = uniqueSorted(audio.filter(\.isRunningOutput).map(\.bundleID))
         signals.audioInputBundleIDs = uniqueSorted(audio.filter(\.isRunningInput).map(\.bundleID))
         signals.candidateWindows = titledWindows.sorted { $0.id > $1.id }

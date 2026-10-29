@@ -4,8 +4,8 @@ import CoreGraphics
 /// Captures a `SystemSnapshot` from the live system: running apps, their windows and audio activity.
 /// Cheap enough (a few milliseconds) to run on the main thread every few seconds.
 struct SnapshotProvider {
-    func capture(watching sources: [MeetingSource]) -> SystemSnapshot {
-        let isWatched = { (bundleID: String) in sources.contains { $0.owns(bundleID: bundleID) } }
+    func capture(sources: SourceBundleIDs) -> SystemSnapshot {
+        let isWatched = { (bundleID: String) in sources.source(owning: bundleID) != nil }
 
         let running = NSWorkspace.shared.runningApplications
             .compactMap(\.bundleIdentifier)
@@ -14,7 +14,8 @@ struct SnapshotProvider {
         return SystemSnapshot(
             runningBundleIDs: Set(running),
             windows: windows(where: isWatched),
-            audioProcesses: CoreAudioProcesses.current().filter { isWatched($0.bundleID) }
+            audioProcesses: CoreAudioProcesses.current().filter { isWatched($0.bundleID) },
+            sources: sources
         )
     }
 

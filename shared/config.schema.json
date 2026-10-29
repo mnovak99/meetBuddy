@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://dev.matej/MeetingAssistant/config.schema.json",
-  "title": "Meeting Assistant configuration",
+  "title": "Meeting Buddy configuration",
   "description": "~/Library/Application Support/MeetingAssistant/config.json. Read by the Swift app and the Python pipeline. Every key is optional; a missing key falls back to its default.",
   "type": "object",
   "properties": {
@@ -13,6 +13,11 @@
     },
     "userName": {
       "description": "Your name as colleagues say it (finds your tasks and mentions). Empty = the first name of the macOS account.",
+      "type": "string",
+      "default": ""
+    },
+    "obsidianVaultPath": {
+      "description": "Absolute path to the Obsidian vault. Empty = not configured yet.",
       "type": "string",
       "default": ""
     },
@@ -37,6 +42,13 @@
       "maximum": 60,
       "default": 3
     },
+    "endGraceSeconds": {
+      "description": "Probable end of a meeting: no signal at all (window closed, no audio) for this long.",
+      "type": "number",
+      "minimum": 5,
+      "maximum": 600,
+      "default": 30
+    },
     "enabledSources": {
       "description": "Meeting sources to detect.",
       "type": "array",
@@ -54,11 +66,34 @@
         "discord"
       ]
     },
+    "meetBrowserBundleID": {
+      "description": "Bundle ID of the browser that runs Google Meet. Chromium browsers (Brave, Chrome, Edge, Arc, Vivaldi, Opera) play audio from `<bundleID>.helper` processes, which the detector matches by prefix.",
+      "type": "string",
+      "default": "com.brave.Browser"
+    },
+    "autoStopMinutes": {
+      "description": "After \"meeting probably ended\" without an answer, stop recording automatically after this many minutes. 0 = never.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 240,
+      "default": 0
+    },
     "minDurationMinutes": {
       "description": "Recordings shorter than this are offered for discarding (notification Zahodit / Ponechat).",
       "type": "number",
       "minimum": 0,
-      "default": 5
+      "default": 5,
+      "maximum": 120
+    },
+    "recordMicrophone": {
+      "description": "Record your microphone into mic.m4a (a separate track, aligned with the meeting audio).",
+      "type": "boolean",
+      "default": true
+    },
+    "microphoneName": {
+      "description": "Microphone recorded into mic.m4a: the first input device whose name contains this text. Empty = the system's default input.",
+      "type": "string",
+      "default": ""
     },
     "frameIntervalSeconds": {
       "description": "How often a frame of the meeting window is checked for a significant change.",
@@ -81,32 +116,127 @@
       "maximum": 1,
       "default": 0.08
     },
+    "notifyMeetingEnded": {
+      "description": "Show the \"meeting probably ended\" notification (the question stays in the menu bar panel either way).",
+      "type": "boolean",
+      "default": true
+    },
+    "notifyNoteReady": {
+      "description": "Show \"note ready\" and \"note with transcript only\" notifications. Failures are always shown.",
+      "type": "boolean",
+      "default": true
+    },
+    "notifyStorage": {
+      "description": "Show storage warnings (over the limit).",
+      "type": "boolean",
+      "default": true
+    },
+    "notifyRecordingProblems": {
+      "description": "Show recording problems (silent audio, window not capturable, microphone).",
+      "type": "boolean",
+      "default": true
+    },
+    "notificationSound": {
+      "description": "Play a sound with notifications.",
+      "type": "boolean",
+      "default": true
+    },
+    "transcriptLanguages": {
+      "description": "Languages Whisper may detect (ISO 639-1). A chunk detected as another language is redone in the first one.",
+      "type": "array",
+      "items": {
+        "enum": [
+          "cs",
+          "sk",
+          "en",
+          "de",
+          "pl"
+        ]
+      },
+      "minItems": 1,
+      "uniqueItems": true,
+      "default": [
+        "cs",
+        "sk",
+        "en"
+      ]
+    },
+    "whisperModel": {
+      "description": "Hugging Face repo of the mlx-whisper model. Empty = mlx-community/whisper-large-v3-turbo.",
+      "type": "string",
+      "default": ""
+    },
+    "claudeModel": {
+      "description": "Model alias for `claude --model` (sonnet, opus, haiku …). Empty = Claude Code's default.",
+      "type": "string",
+      "default": ""
+    },
+    "noteIncludeTranscript": {
+      "description": "Append the full transcript to the note.",
+      "type": "boolean",
+      "default": true
+    },
+    "appendTasksToList": {
+      "description": "Append the user's tasks to `<notesFolder>/Moje úkoly.md`.",
+      "type": "boolean",
+      "default": true
+    },
+    "notesFolder": {
+      "description": "Folder of the meeting notes inside the vault.",
+      "type": "string",
+      "minLength": 1,
+      "default": "Meetings"
+    },
+    "pipelineThreads": {
+      "description": "CPU threads for the models (OMP_NUM_THREADS, torch). Leave room for other work.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 32,
+      "default": 4
+    },
+    "pauseProcessingWhileRecording": {
+      "description": "Do not process recordings while a meeting is being recorded; the queue waits.",
+      "type": "boolean",
+      "default": true
+    },
+    "idleBeforeProcessingMinutes": {
+      "description": "Start processing only after the Mac has been idle (no keyboard or mouse) for this many minutes. 0 = right after the meeting.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 240,
+      "default": 0
+    },
     "audioRetentionDays": {
       "description": "Audio files older than this are offered for deletion.",
       "type": "integer",
       "minimum": 1,
-      "default": 7
+      "default": 7,
+      "maximum": 3650
     },
     "storageLimitGB": {
       "description": "Disk space limit for all recordings of the app.",
       "type": "number",
       "minimum": 1,
-      "default": 10
+      "default": 10,
+      "maximum": 2000
     },
-    "obsidianVaultPath": {
-      "description": "Absolute path to the Obsidian vault. Empty = not configured yet.",
-      "type": "string",
-      "default": ""
+    "menuBarIcon": {
+      "description": "Menu bar icon: the ghost mascot or a plain SF Symbol.",
+      "enum": [
+        "ghost",
+        "symbol"
+      ],
+      "default": "ghost"
     },
-    "recordMicrophone": {
-      "description": "Record your microphone into mic.m4a (a separate track, aligned with the meeting audio).",
+    "showTimerInMenuBar": {
+      "description": "Show the elapsed recording time next to the menu bar icon.",
       "type": "boolean",
-      "default": true
+      "default": false
     },
-    "microphoneName": {
-      "description": "Microphone recorded into mic.m4a: the first input device whose name contains this text. Empty = the system's default input.",
-      "type": "string",
-      "default": ""
+    "debugLogging": {
+      "description": "Verbose logs: detection signals on every poll, pipeline debug output.",
+      "type": "boolean",
+      "default": false
     },
     "pipelinePath": {
       "description": "The Python pipeline project folder; `~` is expanded. Empty = the pipeline folder of the repository the app was built from.",

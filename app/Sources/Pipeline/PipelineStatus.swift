@@ -27,7 +27,10 @@ nonisolated struct PipelineStatus: Codable, Equatable, Sendable {
     }
 
     static func writeQueued(to folder: URL) throws {
-        let status = PipelineStatus(state: .queued, updatedAt: RecordingMetaStore.isoString(Date()))
+        try write(PipelineStatus(state: .queued, updatedAt: RecordingMetaStore.isoString(Date())), to: folder)
+    }
+
+    static func write(_ status: PipelineStatus, to folder: URL) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(status).write(to: folder.appending(path: fileName), options: .atomic)
@@ -93,19 +96,22 @@ nonisolated enum PipelineCommand {
         let home = environment["HOME"] ?? NSHomeDirectory()
 
         var env = environment
-        // Claude must use the logged-in subscription, never a paid API key.
-        env["ANTHROPIC_API_KEY"] = nil
+        // Claude must use the logged-in subscription, never a paid API key or another backend.
+        for key in environment.keys where key.hasPrefix("ANTHROPIC_") || key.hasPrefix("CLAUDE_CODE_") {
+            env[key] = nil
+        }
         env["VIRTUAL_ENV"] = nil
         // Apps started from the Dock or at login do not get the shell's PATH: add uv, claude, ffmpeg.
         let extra = ["\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin"]
         env["PATH"] = (extra + [environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"]).joined(separator: ":")
         env["PYANNOTE_METRICS_ENABLED"] = "0"
-        env["OMP_NUM_THREADS"] = "4"
+        env["OMP_NUM_THREADS"] = String(config.pipelineThreads)
 
         return Invocation(
             executable: URL(filePath: "/usr/sbin/taskpolicy"),
             arguments: ["-b", uv, "run", "--project", project, "meeting-pipeline"]
-                + (force ? ["--force"] : []) + [folder.path(percentEncoded: false)],
+                + (force ? ["--force"] : []) + (config.debugLogging ? ["--verbose"] : [])
+                + [folder.path(percentEncoded: false)],
             environment: env
         )
     }

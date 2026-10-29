@@ -33,7 +33,8 @@ enum LoginItem {
 
 /// The Hugging Face token for the pyannote model, kept in the login Keychain. The pipeline reads it
 /// with the `security` tool, so the app uses the same tool: the Keychain item stays readable for it.
-enum HuggingFaceToken {
+/// `nonisolated`: runs the tool synchronously, so callers use it from a background task.
+nonisolated enum HuggingFaceToken {
     static let service = "MeetingAssistant HF token"
 
     /// True if the token is stored (without reading the secret itself).

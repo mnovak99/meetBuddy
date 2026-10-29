@@ -2,6 +2,9 @@ import Foundation
 import Observation
 
 /// Runs the Python pipeline for finished recordings, one at a time, and follows its status.json.
+///
+/// A `gate` can hold the queue back (a meeting is being recorded, the Mac is in use); the queue
+/// is retried on every `refresh()`.
 @Observable
 final class PipelineRunner {
     /// The recording being processed right now and its latest status.
@@ -13,16 +16,24 @@ final class PipelineRunner {
     private(set) var lastFolder: URL?
     private(set) var lastStatus: PipelineStatus?
     private(set) var lastNotePath: String?
+    /// Why the queue is not being processed right now (Czech, for the UI), or nil.
+    private(set) var waitingReason: String?
 
     /// Called when a run ends (done, needs_summary or failed).
     @ObservationIgnored var onFinished: ((URL, PipelineStatus?) -> Void)?
+    /// Returns why the next run must wait (Czech), or nil when it may start.
+    @ObservationIgnored var gate: (() -> String?)?
 
     @ObservationIgnored private var config: AppConfig
     @ObservationIgnored private var process: Process?
     /// Queued recordings to process from scratch ("Přepsat znovu od začátku").
     @ObservationIgnored private var startOver: Set<URL> = []
+    /// The running recording should be processed again when it finishes (with `force` or not).
+    @ObservationIgnored private var rerunCurrent: Bool?
     /// Set when the watchdog stopped a run that made no progress.
     @ObservationIgnored private var stalled = false
+    /// The app is quitting: a terminated run is not a failure.
+    @ObservationIgnored private var isShuttingDown = false
 
     /// Without a status update for this long, a run counts as stuck. Every step reports progress
     /// well within it (one Whisper chunk, one Claude call, diarization of a long meeting).
@@ -38,18 +49,30 @@ final class PipelineRunner {
         self.config = config
     }
 
+    var isRunning: Bool { process != nil }
+
+    func isProcessing(_ folder: URL) -> Bool {
+        current.map { Self.same($0, folder) } ?? false
+    }
+
+    func isQueued(_ folder: URL) -> Bool {
+        queue.contains { Self.same($0, folder) }
+    }
+
     /// Adds a finished recording. `start: false` only marks it queued (the app is quitting);
     /// it is picked up on the next launch. `force`: process it from scratch.
     func enqueue(_ folder: URL, start: Bool = true, force: Bool = false) {
+        if isProcessing(folder) {
+            // Asked again while running: do it after this run; never touch its status.json.
+            rerunCurrent = force || (rerunCurrent ?? false)
+            Log.pipeline.notice("Rerun requested for the running \(folder.lastPathComponent, privacy: .public)")
+            return
+        }
         if force {
             startOver.insert(folder)
         }
-        do {
-            try PipelineStatus.writeQueued(to: folder)
-        } catch {
-            Log.pipeline.error("Cannot write status.json: \(String(describing: error), privacy: .public)")
-        }
-        if folder != current && !queue.contains(folder) {
+        markQueued(folder)
+        if !isQueued(folder) {
             queue.append(folder)
             Log.pipeline.notice("Queued \(folder.lastPathComponent, privacy: .public)")
         }
@@ -58,18 +81,42 @@ final class PipelineRunner {
         }
     }
 
+    /// Writes `queued` without processing now (a short recording waiting for Zahodit / Ponechat:
+    /// without an answer it is processed on the next launch).
+    func markQueued(_ folder: URL) {
+        do {
+            try PipelineStatus.writeQueued(to: folder)
+        } catch {
+            Log.pipeline.error("Cannot write status.json: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Forgets a recording that is being deleted: drops it from the queue and stops its run.
+    func remove(_ folder: URL) {
+        queue.removeAll { Self.same($0, folder) }
+        startOver = startOver.filter { !Self.same($0, folder) }
+        if isProcessing(folder), let process, process.isRunning {
+            Log.pipeline.notice("Stopping the pipeline, its recording is being deleted")
+            rerunCurrent = nil
+            process.terminate()
+        }
+    }
+
     /// At launch: continue with recordings that were queued or interrupted.
     func resumePending() {
-        for folder in PipelineQueue.pending(in: RecordingFolder.recordingsDirectory) where !queue.contains(folder) {
+        for folder in PipelineQueue.pending(in: RecordingFolder.recordingsDirectory) where !isQueued(folder) {
             queue.append(folder)
             Log.pipeline.notice("Resuming \(folder.lastPathComponent, privacy: .public)")
         }
         startNextIfIdle()
     }
 
-    /// Called every poll: reads the progress of the running recording.
+    /// Called every poll: reads the progress of the running recording and retries a held queue.
     func refresh(now: Date = .now) {
-        guard let current else { return }
+        guard let current else {
+            startNextIfIdle()
+            return
+        }
         currentStatus = PipelineStatus.read(from: current)
         if let status = currentStatus, PipelineQueue.isStalled(status, now: now, timeout: Self.stallTimeout),
            let process, process.isRunning, !stalled {
@@ -81,6 +128,7 @@ final class PipelineRunner {
 
     /// The app quits: stop the running pipeline. It is idempotent, so the next launch continues.
     func terminate() {
+        isShuttingDown = true
         guard let process, process.isRunning else { return }
         Log.pipeline.notice("Stopping the pipeline, it continues on the next launch")
         process.terminate()
@@ -88,16 +136,27 @@ final class PipelineRunner {
 
     // MARK: - Private
 
+    /// Folder URLs come from different places (created by the app, listed from disk); compare
+    /// their standardized paths rather than the URL strings.
+    nonisolated static func same(_ a: URL, _ b: URL) -> Bool {
+        a.standardizedFileURL.path(percentEncoded: false).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            == b.standardizedFileURL.path(percentEncoded: false).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
     private func startNextIfIdle() {
-        guard process == nil, !queue.isEmpty else { return }
+        guard process == nil, !queue.isEmpty, !isShuttingDown else { return }
+        if let reason = gate?() {
+            if reason != waitingReason {
+                Log.pipeline.info("Pipeline waits: \(reason, privacy: .public)")
+            }
+            waitingReason = reason
+            return
+        }
+        waitingReason = nil
         let folder = queue.removeFirst()
         let pipelinePath = config.resolvedPipelinePath()
         guard FileManager.default.fileExists(atPath: pipelinePath) else {
-            lastFolder = folder
-            lastStatus = PipelineStatus(
-                state: .failed, updatedAt: RecordingMetaStore.isoString(Date()),
-                error: "Složka pipeline nenalezena (\(pipelinePath)). Nastav ji v Nastavení → Pokročilé.")
-            onFinished?(folder, lastStatus)
+            fail(folder, error: "Složka pipeline nenalezena (\(pipelinePath)). Nastav ji v Nastavení → Pokročilé.")
             return
         }
         let invocation = PipelineCommand.make(
@@ -132,18 +191,31 @@ final class PipelineRunner {
             Log.pipeline.notice("Pipeline started for \(folder.lastPathComponent, privacy: .public)")
         } catch {
             Log.pipeline.error("Cannot start the pipeline: \(String(describing: error), privacy: .public)")
-            lastFolder = folder
-            lastStatus = PipelineStatus(
-                state: .failed, updatedAt: RecordingMetaStore.isoString(Date()),
-                error: "Nejde spustit pipeline: \(error.localizedDescription)")
-            onFinished?(folder, lastStatus)
+            fail(folder, error: "Nejde spustit pipeline: \(error.localizedDescription)")
         }
+    }
+
+    /// A run that could not even start: record the failure and go on with the queue.
+    private func fail(_ folder: URL, error: String) {
+        let status = PipelineStatus(state: .failed, updatedAt: RecordingMetaStore.isoString(Date()), error: error)
+        try? PipelineStatus.write(status, to: folder)
+        lastFolder = folder
+        lastStatus = status
+        lastNotePath = NoteResultFile.read(from: folder)?.notePath
+        onFinished?(folder, status)
+        startNextIfIdle()
     }
 
     private func processFinished(folder: URL, exitCode: Int32) {
         process = nil
         current = nil
         currentStatus = nil
+        let rerun = rerunCurrent
+        rerunCurrent = nil
+        if isShuttingDown {
+            Log.pipeline.notice("Pipeline stopped for \(folder.lastPathComponent, privacy: .public) (quitting)")
+            return
+        }
         var status = PipelineStatus.read(from: folder)
         if status == nil || status?.isInProgress == true || status?.state == .queued {
             // Killed or crashed before writing a final state.
@@ -153,6 +225,9 @@ final class PipelineRunner {
                 error: stalled
                     ? "Zpracování se zaseklo (\(minutes) min beze změny u „\(status?.message ?? "?")“), ukončeno. Dej „Zkusit znovu“."
                     : "Pipeline skončila s kódem \(exitCode), podrobnosti v \(Self.logFileName)")
+            if FileManager.default.fileExists(atPath: folder.path(percentEncoded: false)), let status {
+                try? PipelineStatus.write(status, to: folder)
+            }
         }
         stalled = false
         Log.pipeline.notice("Pipeline finished for \(folder.lastPathComponent, privacy: .public): \(status?.state.rawValue ?? "?", privacy: .public) (exit \(exitCode))")
@@ -163,6 +238,9 @@ final class PipelineRunner {
             trashUnselectedFrames(in: folder)
         }
         onFinished?(folder, status)
+        if let rerun, FileManager.default.fileExists(atPath: folder.path(percentEncoded: false)) {
+            enqueue(folder, start: false, force: rerun)
+        }
         startNextIfIdle()
     }
 
