@@ -49,17 +49,28 @@ final class FrameCapturer {
 
     func start() {
         task?.cancel()
+        // `[weak self]`: the task must not keep the capturer alive after its owner let it go.
         task = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.captureOnce()
-                try? await Task.sleep(for: .seconds(self?.interval ?? 2.5))
+                // The owner released the capturer without stop(): end the loop instead of
+                // sleeping forever with nothing to capture.
+                guard let self else { return }
+                await self.captureOnce()
+                try? await Task.sleep(for: .seconds(self.interval))
             }
         }
     }
 
+    /// Safe to call more than once.
     func stop() {
+        guard let task else { return }
+        task.cancel()
+        self.task = nil
+    }
+
+    /// Safety net for an owner that forgot stop(): the loop ends at its next check.
+    deinit {
         task?.cancel()
-        task = nil
     }
 
     /// The user picked another window in the menu.

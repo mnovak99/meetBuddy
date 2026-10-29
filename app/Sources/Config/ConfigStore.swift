@@ -1,7 +1,10 @@
 import Foundation
 
-/// Loads config.json. Creates it with defaults on first launch and never overwrites an existing file
-/// (the user edits it by hand until the settings GUI exists).
+/// Reads and writes config.json. `load` creates the file with defaults on first launch and never
+/// changes an existing one; every control of the Settings window writes through
+/// `AppModel.updateConfig` → `write`. The file can still be edited by hand (the Python pipeline
+/// reads it too) and re-read with „Znovu načíst nastavení“; an invalid file falls back to the
+/// defaults with a message, so the app always starts.
 nonisolated enum ConfigStore {
     struct LoadResult: Sendable {
         var config: AppConfig

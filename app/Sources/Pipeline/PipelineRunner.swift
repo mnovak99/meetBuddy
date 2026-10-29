@@ -98,7 +98,8 @@ final class PipelineRunner {
         if isProcessing(folder), let process, process.isRunning {
             Log.pipeline.notice("Stopping the pipeline, its recording is being deleted")
             rerunCurrent = nil
-            process.terminate()
+            // uv and its Python child, SIGKILL for whatever ignores SIGTERM (see ProcessTree).
+            ProcessTree.terminate(pid: process.processIdentifier)
         }
     }
 
@@ -131,7 +132,8 @@ final class PipelineRunner {
         isShuttingDown = true
         guard let process, process.isRunning else { return }
         Log.pipeline.notice("Stopping the pipeline, it continues on the next launch")
-        process.terminate()
+        // uv and its Python child, SIGKILL for whatever ignores SIGTERM (see ProcessTree).
+        ProcessTree.terminate(pid: process.processIdentifier)
     }
 
     // MARK: - Private

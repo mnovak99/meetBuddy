@@ -23,7 +23,8 @@ nonisolated enum DetectorState: Equatable, Sendable {
     case idle
     /// Meeting detected, waiting for the user's answer.
     case detected(MeetingSession)
-    /// The user chose not to record; do not ask again until this meeting ends.
+    /// The user chose not to record; do not ask again until this meeting ends or another
+    /// meeting replaces it (`MeetingDetector.isNewMeeting`).
     case declined(MeetingSession)
     /// The user chose to record.
     case recording(MeetingSession)
@@ -51,7 +52,9 @@ nonisolated enum EndReason: String, Equatable, Sendable {
     case appQuit
     /// Neither the primary nor the secondary signal was seen for `endGraceSeconds`.
     case signalsGone
-    /// The primary signal was missing for `endSilenceSeconds`.
+    /// The primary signal was missing for `endSilenceSeconds`. Also the reason of `closed` when an
+    /// unanswered or declined meeting is replaced by the next one: its own primary signal went
+    /// away first (the audio stopped, or the Meet window shows another meeting).
     case primaryGone
 }
 
@@ -69,6 +72,10 @@ nonisolated struct DetectorSettings: Equatable, Sendable {
     var endGraceSeconds: TimeInterval
     var endSilenceSeconds: TimeInterval
     var enabledSources: [MeetingSource]
+    /// Teams, Discord: when the audio of an unanswered or declined meeting is missing for at
+    /// least this long and then comes back, it is the next meeting (`MeetingDetector.isNewMeeting`).
+    /// Short enough for back-to-back calls, long enough to ignore a device switch or a hiccup.
+    var newMeetingGapSeconds: TimeInterval = 15
 }
 
 nonisolated extension DetectorSettings {
@@ -99,6 +106,11 @@ nonisolated struct MeetingDetector {
     /// Last time the current session's primary signal / any of its signals was seen.
     private var lastPrimaryAt: Date?
     private var lastAnySignalAt: Date?
+    /// The current session's primary signal was missing at the previous poll (to notice when
+    /// it comes back after a gap).
+    private var primaryWasMissing = false
+    /// Since when a Meet window other than the session's has been the meeting window.
+    private var otherMeetWindowSince: Date?
 
     init(settings: DetectorSettings) {
         self.settings = settings
@@ -154,8 +166,7 @@ nonisolated struct MeetingDetector {
             id: UUID(), source: source, appBundleID: sources.bundleID(for: source), detectedAt: now,
             windowID: window?.id, windowTitle: window?.title, acceptedAt: now, isManual: true)
         state = .recording(session)
-        lastPrimaryAt = now
-        lastAnySignalAt = now
+        startTracking(now: now)
         return session
     }
 
@@ -207,16 +218,27 @@ nonisolated struct MeetingDetector {
                 id: UUID(), source: source, appBundleID: sources.bundleID(for: source), detectedAt: now,
                 windowID: window?.id, windowTitle: window?.title)
             state = .detected(session)
-            lastPrimaryAt = now
-            lastAnySignalAt = now
+            startTracking(now: now)
             return [.detected(session)]
         }
         return []
     }
 
+    /// A session starts: its signals were just seen, nothing is missing yet.
+    private mutating func startTracking(now: Date) {
+        lastPrimaryAt = now
+        lastAnySignalAt = now
+        primaryWasMissing = false
+        otherMeetWindowSince = nil
+    }
+
     private mutating func checkEnd(of session: MeetingSession, in snapshot: SystemSnapshot, now: Date) -> [DetectorEvent] {
         let sourceSignals = signals[session.source] ?? SourceSignals()
         let presence = MeetingRules.presence(of: session, signals: sourceSignals, in: snapshot)
+        // How long the primary signal was away when it is back now; nil while it stays or is still away.
+        let primaryGap: TimeInterval? = presence.primary && primaryWasMissing
+            ? now.timeIntervalSince(lastPrimaryAt ?? now) : nil
+        primaryWasMissing = !presence.primary
         if presence.primary {
             lastPrimaryAt = now
         }
@@ -224,10 +246,22 @@ nonisolated struct MeetingDetector {
             lastAnySignalAt = now
         }
 
-        // The meeting came back after a suspected end (e.g. audio resumed): clear the flag.
-        if case .recording(var recording) = state, recording.probableEndAt != nil, presence.primary {
-            recording.probableEndAt = nil
-            state = .recording(recording)
+        switch state {
+        case .detected, .declined:
+            // A meeting nobody records must not hide the next one: when another meeting has
+            // replaced it, start over, so detectNewMeeting can ask about the new one.
+            if isNewMeeting(after: session, signals: sourceSignals, primaryGap: primaryGap, now: now) {
+                resetToIdle()
+                return [.closed(session, .primaryGone)] + detectNewMeeting(now: now)
+            }
+        case .recording(var recording):
+            // The meeting came back after a suspected end (e.g. audio resumed): clear the flag.
+            if recording.probableEndAt != nil, presence.primary {
+                recording.probableEndAt = nil
+                state = .recording(recording)
+            }
+        case .idle:
+            break
         }
 
         guard let reason = endReason(isRunning: sourceSignals.isRunning, now: now) else { return [] }
@@ -243,6 +277,42 @@ nonisolated struct MeetingDetector {
             return [.closed(session, reason)]
         case .idle:
             return []
+        }
+    }
+
+    /// Whether another meeting has replaced the unanswered or declined `session`.
+    ///
+    /// - Google Meet: the meeting window is a different one (window ID or title) and has been
+    ///   for `confirmSeconds`. A short look at another Meet tab does not count: when the
+    ///   session's window is active again, the declined meeting simply goes on. Switching to a
+    ///   non-Meet tab hides the window; that is left to the end timers. The new meeting is a
+    ///   stable candidate by then, so it is detected in the same poll. Known limit: a Meet tab
+    ///   opened early for the next meeting and then left again (both for longer than
+    ///   `confirmSeconds`) asks about the declined meeting once more.
+    /// - Teams, Discord: window titles do not identify a call (Teams opens windows for chats
+    ///   and pop-outs too), so the audio decides. The call's audio stopped and is back after
+    ///   `newMeetingGapSeconds`, or it stopped at all and a window newer than the session's
+    ///   exists now (a new call window). A new window alone, with the audio never interrupted,
+    ///   is not a new meeting. The candidate timer restarted during the gap, so the new call is
+    ///   confirmed like any other.
+    private mutating func isNewMeeting(
+        after session: MeetingSession, signals: SourceSignals, primaryGap: TimeInterval?, now: Date
+    ) -> Bool {
+        switch session.source {
+        case .meet:
+            guard let window = signals.meetingWindow,
+                  window.id != session.windowID || window.title != session.windowTitle
+            else {
+                otherMeetWindowSince = nil
+                return false
+            }
+            let since = otherMeetWindowSince ?? now
+            otherMeetWindowSince = since
+            return now.timeIntervalSince(since) >= settings.confirmSeconds
+        case .teams, .discord:
+            guard let primaryGap else { return false }
+            let newerWindow = signals.meetingWindow.map { $0.id > (session.windowID ?? 0) } ?? false
+            return primaryGap >= settings.newMeetingGapSeconds || newerWindow
         }
     }
 
@@ -263,5 +333,7 @@ nonisolated struct MeetingDetector {
         state = .idle
         lastPrimaryAt = nil
         lastAnySignalAt = nil
+        primaryWasMissing = false
+        otherMeetWindowSince = nil
     }
 }

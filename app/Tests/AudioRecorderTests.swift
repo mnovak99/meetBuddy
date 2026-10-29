@@ -94,5 +94,59 @@ struct AudioStreamLayoutTests {
         let layout = AudioStreamLayout(streams: [.init(terminalType: 0, channels: 1, isNonInterleaved: false)])
         #expect(layout.tapStreamIndex == 0)
         #expect(layout.microphoneStreamIndex == nil)
+        #expect(!layout.isTapAmbiguous)
+    }
+
+    @Test func untypedStereoMicrophoneIsToldApartByFormat() {
+        // A microphone reporting no terminal type, but stereo: only the mono stream can be the tap.
+        let layout = AudioStreamLayout(streams: [
+            .init(terminalType: 0, channels: 2, isNonInterleaved: false),
+            .init(terminalType: 0, channels: 1, isNonInterleaved: false),
+        ], tapSampleRate: 48_000)
+        #expect(layout.tapStreamIndex == 1)
+        #expect(layout.microphoneStreamIndex == 0)
+        #expect(!layout.isTapAmbiguous)
+    }
+
+    @Test func untypedMonoMicrophoneAtAnotherSampleRateIsToldApart() {
+        let layout = AudioStreamLayout(streams: [
+            .init(terminalType: 0, channels: 1, isNonInterleaved: false, sampleRate: 48_000),
+            .init(terminalType: 0, channels: 1, isNonInterleaved: false, sampleRate: 44_100),
+        ], tapSampleRate: 44_100)
+        #expect(layout.tapStreamIndex == 1)
+        #expect(layout.microphoneStreamIndex == 0)
+    }
+
+    @Test func untypedMicrophoneWithTheTapsFormatIsAmbiguous() {
+        // Two mono 48 kHz streams without a terminal type: no way to tell which one is the tap.
+        let layout = AudioStreamLayout(streams: [
+            .init(terminalType: 0, channels: 1, isNonInterleaved: false),
+            .init(terminalType: 0, channels: 1, isNonInterleaved: false),
+        ], tapSampleRate: 48_000)
+        #expect(layout.isTapAmbiguous)
+        #expect(layout.tapStreamIndex == nil)
+        #expect(layout.microphoneStreamIndex == nil)
+    }
+
+    @Test func microphoneWithSeveralStreamsContributesTheFirstOne() {
+        let layout = AudioStreamLayout(streams: [
+            .init(terminalType: microphone, channels: 1, isNonInterleaved: false),
+            .init(terminalType: microphone, channels: 1, isNonInterleaved: false),
+            .init(terminalType: 0, channels: 1, isNonInterleaved: false),
+        ], tapSampleRate: 48_000)
+        #expect(layout.tapStreamIndex == 2)
+        #expect(layout.microphoneStreamIndex == 0)
+        #expect(layout.bufferIndex(ofStream: 2) == 2)
+    }
+
+    @Test func typedMicrophoneNeverCompetesWithTheTap() {
+        // A typed microphone with the tap's exact format is still the microphone.
+        let layout = AudioStreamLayout(streams: [
+            .init(terminalType: 0, channels: 1, isNonInterleaved: false),
+            .init(terminalType: microphone, channels: 1, isNonInterleaved: false),
+        ], tapSampleRate: 48_000)
+        #expect(layout.tapStreamIndex == 0)
+        #expect(layout.microphoneStreamIndex == 1)
+        #expect(!layout.isTapAmbiguous)
     }
 }
