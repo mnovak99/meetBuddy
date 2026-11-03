@@ -63,7 +63,9 @@ struct AudioRecorderTests {
         #expect(stats.buffersReceived > 0, "the aggregate device delivered no audio")
         #expect(stats.lastSignalAt != nil, "only silence was recorded")
         let duration = try await AVURLAsset(url: url).load(.duration).seconds
-        #expect(duration > 2)
+        // About the 3 s played. A wrong sample rate on the file (the device runs at the clock
+        // device's rate, e.g. 16 kHz with a headset) would make it a third or three times as long.
+        #expect(duration > 2.5 && duration < 4, "audio.m4a is \(duration) s long instead of about 3 s")
         try? FileManager.default.removeItem(at: url)
     }
 }

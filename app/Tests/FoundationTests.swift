@@ -85,3 +85,19 @@ struct FoundationTests {
         #expect(!PipelineRunner.same(a, c))
     }
 }
+
+/// The menu bar timer changes once a minute only (each change re-renders the status item).
+struct MenuBarTimerTests {
+    @Test func timerShowsHoursAndMinutes() {
+        #expect(AppModel.menuBarTimerText(elapsed: 0) == "0:00")
+        #expect(AppModel.menuBarTimerText(elapsed: 59) == "0:00")
+        #expect(AppModel.menuBarTimerText(elapsed: 60) == "0:01")
+        #expect(AppModel.menuBarTimerText(elapsed: 3_725) == "1:02")
+        #expect(AppModel.menuBarTimerText(elapsed: -5) == "0:00")
+    }
+
+    @Test func ghostImageIsMadeOncePerBadge() {
+        #expect(MenuBarGhost.image(badge: .recording) === MenuBarGhost.image(badge: .recording))
+        #expect(MenuBarGhost.image(badge: .none) !== MenuBarGhost.image(badge: .recording))
+    }
+}

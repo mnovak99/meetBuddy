@@ -25,6 +25,8 @@ Sekci `[Unreleased]` doplňuj průběžně; `scripts/release.sh` z ní při vyd�
 - Pipeline dostává z appky `--verbose` při podrobném logování a počet vláken z nastavení; z prostředí se odstraňují všechny proměnné `ANTHROPIC_*` a `CLAUDE_CODE_*`.
 
 ### Opraveno
+- Appka padala (zamrzla a pak ji systém ukončil) hned po „Nahrávat“, když byl zapnutý čas nahrávání v menu baru: živě aktualizovaný čas v ikoně vyvolával nekonečné překreslování. Čas se teď mění jednou za minutu a obrázek ducha se kreslí jen jednou.
+- `audio.m4a` byl zrychlený a měl jen třetinu skutečné délky, když mikrofon (např. sluchátka Arctis v režimu headset) přepnul zvukové zařízení na 16 kHz. Obě stopy se teď značí skutečnou frekvencí zařízení. Týká se i starších nahrávek.
 - Fronta pipeline se zasekla, když se zpracování nepodařilo spustit (chybějící složka pipeline, smazaná nahrávka).
 - „Přepsat znovu od začátku“ u právě zpracovávané nahrávky přepisovalo její `status.json`; teď se provede po skončení běžícího zpracování.
 - Smazání nahrávky ve frontě nebo ve zpracování ji nejdřív z fronty odstraní a zpracování zastaví.

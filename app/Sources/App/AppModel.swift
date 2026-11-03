@@ -29,6 +29,9 @@ final class AppModel {
     private(set) var storageWarning: String?
     /// Recordings whose audio is older than `audioRetentionDays`.
     private(set) var expiredAudioCount = 0
+    /// Elapsed time next to the menu bar icon ("0:12"), nil when not recording. Changes once a
+    /// minute only: every change makes the menu bar re-render the status item.
+    private(set) var menuBarTimerText: String?
     /// The section shown in the main window (the menu bar panel can open a specific one).
     var windowSection: WindowSection = .overview
     /// The recording to show in Nahrávky (set by the panel or a notification).
@@ -332,6 +335,7 @@ final class AppModel {
                 self?.windowAvailabilityChanged(available)
             }
             recording = controller
+            updateMenuBarTimer()
             if let audioError = controller.audioError {
                 notifications.postInfo(
                     title: "Zvuk se nenahrává", body: audioError,
@@ -366,6 +370,7 @@ final class AppModel {
 
     private func recordingFinished(_ recording: RecordingController, meta: RecordingMeta, reason: RecordingEndReason) {
         self.recording = nil
+        updateMenuBarTimer()
         let minimum = config.minDurationMinutes * 60
         if reason == .user, let duration = meta.durationSeconds, duration < minimum {
             // Processed only after "Ponechat"; without an answer it is queued for the next launch.
@@ -476,7 +481,22 @@ final class AppModel {
         pipeline.refresh()
     }
 
+    /// Hours and minutes of the running recording; assigned only when the text changes.
+    private func updateMenuBarTimer() {
+        let text = recording.map { Self.menuBarTimerText(elapsed: $0.elapsedSeconds) }
+        if text != menuBarTimerText {
+            menuBarTimerText = text
+        }
+    }
+
+    /// "0:05", "1:12" (h:mm).
+    nonisolated static func menuBarTimerText(elapsed: TimeInterval) -> String {
+        let minutes = max(0, Int(elapsed)) / 60
+        return String(format: "%d:%02d", minutes / 60, minutes % 60)
+    }
+
     private func refreshRecordingStatus() {
+        defer { updateMenuBarTimer() }
         guard let recording else { return }
         let source = recording.session.source
         let wasSilent = recording.silenceSuspected

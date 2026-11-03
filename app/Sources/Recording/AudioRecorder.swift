@@ -160,9 +160,17 @@ nonisolated final class AudioRecorder: @unchecked Sendable {
         aggregateDevice = device
         guard let tapIndex = layout.tapStreamIndex else { throw RecorderError.tapStreamNotFound }
 
-        // The IOProc delivers the aggregate device's streams, which run at the clock device's
-        // rate (the tap is resampled into it), so the writer takes that format, not `tap.format`.
+        // Every IOProc call carries the same number of frames for all streams: the aggregate
+        // device runs at ONE rate, its nominal sample rate (set by the clock device: 16 kHz for a
+        // headset microphone like the Arctis, 48 kHz for speakers). The tap is resampled into it.
+        // Neither `tap.format` nor the stream's `virtualFormat` reliably reports that rate (both
+        // said 48 kHz while the Arctis ran the device at 16 kHz, so audio.m4a came out a third
+        // of its real length), so the files are timestamped with the device's own rate.
+        let deviceRate = try device.nominalSampleRate
         var appFormatDescription = try aggregate.inputStreams[tapIndex].virtualFormat
+        Log.audio.notice(
+            "Sample rates: device \(deviceRate) Hz, tap \(tapFormat.sampleRate) Hz, tap stream \(appFormatDescription.mSampleRate) Hz")
+        appFormatDescription.mSampleRate = deviceRate
         guard let appFormat = AVAudioFormat(streamDescription: &appFormatDescription) else {
             throw RecorderError.unsupportedFormat
         }
@@ -170,8 +178,10 @@ nonisolated final class AudioRecorder: @unchecked Sendable {
             bufferIndex: layout.bufferIndex(ofStream: tapIndex), format: appFormat, downmix: nil,
             writer: try AACFileWriter(url: appFileURL, inputFormat: appFormat, bitRate: bitRate))
         if let microphone, micDevice != nil, let micIndex = layout.microphoneStreamIndex {
+            var micDescription = try aggregate.inputStreams[micIndex].virtualFormat
+            micDescription.mSampleRate = deviceRate  // see above: one rate for the whole device
             micTrack = try makeMicrophoneTrack(
-                description: aggregate.inputStreams[micIndex].virtualFormat,
+                description: micDescription,
                 bufferIndex: layout.bufferIndex(ofStream: micIndex), fileURL: microphone.fileURL)
             if micTrack == nil {
                 microphoneProblem = "Neznámý formát zvuku z mikrofonu."

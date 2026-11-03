@@ -11,7 +11,21 @@ nonisolated enum MenuBarGhost {
         case recording
     }
 
-    static func image(badge: Badge) -> NSImage {
+    /// One image per badge, made once. The drawing handler runs whenever AppKit draws the
+    /// image (in the current menu bar colours), so the cached image still follows light/dark.
+    /// A new NSImage on every label update would make the status item re-layout each time.
+    @MainActor private static var cache: [Badge: NSImage] = [:]
+
+    @MainActor static func image(badge: Badge) -> NSImage {
+        if let cached = cache[badge] {
+            return cached
+        }
+        let image = makeImage(badge: badge)
+        cache[badge] = image
+        return image
+    }
+
+    private static func makeImage(badge: Badge) -> NSImage {
         let image = NSImage(size: NSSize(width: 20, height: 18), flipped: true) { _ in
             guard let context = NSGraphicsContext.current?.cgContext else { return false }
             let label = NSColor.labelColor.cgColor
