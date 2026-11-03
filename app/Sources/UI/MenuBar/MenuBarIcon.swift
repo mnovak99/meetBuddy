@@ -7,20 +7,14 @@ import SwiftUI
 /// `NSStatusItem` and redoes that on every change. A self-updating view here (such as
 /// `Text(timerInterval:)`) makes it update without end: the main thread spins and memory grows
 /// until macOS kills the app. So the label only reads values that change rarely
-/// (state, a cached ghost image, the elapsed time in minutes from the model).
+/// (the state and a cached ghost image); there is no timer next to the icon.
 struct MenuBarIcon: View {
     let model: AppModel
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
-        HStack(spacing: 4) {
-            icon
-            if model.config.showTimerInMenuBar, let timer = model.menuBarTimerText {
-                Text(timer)
-                    .font(.system(size: 12, weight: .medium).monospacedDigit())
-            }
-        }
+        icon
         .accessibilityLabel(accessibilityText)
         .onAppear {
             model.registerWindowOpeners(

@@ -40,7 +40,6 @@
   "audioRetentionDays": 7,
   "storageLimitGB": 10,
   "menuBarIcon": "ghost",
-  "showTimerInMenuBar": false,
   "debugLogging": false,
   "pipelinePath": "",
   "uvPath": ""

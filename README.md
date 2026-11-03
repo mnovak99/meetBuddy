@@ -22,7 +22,7 @@ Zpracování běží lokálně na Macu. Jediná služba mimo něj je Claude, kte
   - přepis Whisperem large-v3-turbo (čeština, slovenština a angličtina se poznávají po úsecích),
   - Claude přiřadí jména, opraví pojmy podle slovníku a napíše poznámku.
 - **Poznámka v Obsidianu:** shrnutí, klíčové body, rozhodnutí, moje úkoly, úkoly ostatních, otevřené otázky, kde padlo moje jméno, sdílený obsah se snímky a celý přepis. Tvoje úkoly se navíc přidají do `Meetings/Moje úkoly.md`.
-- **Panel v menu baru:** stav, živý čas nahrávání, signál zvuku a mikrofonu, počet snímků, otázky Nahrávat? / Ukončit?, průběh zpracování a varování s tlačítky, které rovnou otevřou správné místo.
+- **Panel v menu baru:** stav, délka nahrávání, signál zvuku a mikrofonu, počet snímků, otázky Nahrávat? / Ukončit?, průběh zpracování a varování s tlačítky, které rovnou otevřou správné místo.
 - **Okno appky:**
   - **Přehled**: stav, zpracování, obsazení úložiště, checklist připravenosti (oprávnění, vault, token, Claude, uv a pipeline, start po přihlášení) a poslední nahrávky,
   - **Nahrávky**: seznam s hledáním a detail každé nahrávky (shrnutí, přepis, snímky, podrobnosti a log zpracování),
@@ -116,7 +116,7 @@ Na [Releases](https://github.com/mnovak99/meetBuddy/releases) je `MeetingBuddy-X
 - **Duch v menu baru:**
   - bez tečky = čeká na meeting,
   - **oranžová** tečka = meeting detekován, čeká na odpověď,
-  - **červená** = nahrává (volitelně i s časem vedle ikony: Nastavení → Pokročilé).
+  - **červená** = nahrává.
 - **Panel:** kliknutím na ducha. Nahoře stav a čas, pak karta podle situace (Nahrávat? / Ukončit nahrávání / Nahrávat ručně), zpracování, varování a dole Přehled, Nahrávky, Slovník, Nastavení… (⌘,) a Ukončit (⌘Q).
 - **Průběh:**
   1. Začne meeting a přijde notifikace „Nahrávat?“ → **Ano** (nebo v panelu **Nahrávat**).
@@ -151,7 +151,7 @@ Po každém meetingu navrhne Claude pojmy, které Whisper nepoznal. Najdeš je n
 | **Notifikace** | zvuk a jednotlivé druhy notifikací („Nahrávat?“ a chyby se zobrazují vždy) |
 | **AI** | jazyky přepisu, model Whisperu a Clauda, přepis do poznámky, „Moje úkoly.md“, složka poznámek, vlákna CPU, nezpracovávat během nahrávání, čekat na nečinnost Macu, token Hugging Face |
 | **Úložiště** | kdy nabídnout smazání audia, limit místa |
-| **Pokročilé** | ikona v menu baru, čas vedle ikony, podrobné logování, otevření logů, export diagnostiky, cesty k pipeline a `uv`, znovunačtení `config.json`, restart |
+| **Pokročilé** | ikona v menu baru, podrobné logování, otevření logů, export diagnostiky, cesty k pipeline a `uv`, znovunačtení `config.json`, restart |
 
 Všechno se ukládá do `config.json` hned po změně; soubor jde dál upravovat i ručně (Pokročilé → Znovu načíst).
 

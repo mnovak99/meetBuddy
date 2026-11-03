@@ -12,7 +12,7 @@ Sekci `[Unreleased]` doplňuj průběžně; `scripts/release.sh` z ní při vyd�
   - **Detekce:** prohlížeč pro Google Meet (Brave, Chrome, Edge, Arc, Vivaldi, Opera nebo vlastní bundle ID), interval kontroly, konec bez jakéhokoli signálu (`endGraceSeconds`), automatické ukončení nahrávání, když po pravděpodobném konci nikdo neodpoví (`autoStopMinutes`, výchozí vypnuto).
   - **Notifikace:** zvuk a jednotlivé druhy notifikací (konec meetingu, hotová poznámka, úložiště, problémy při nahrávání); „Nahrávat?“ a chyby se zobrazují vždy.
   - **AI a pipeline:** jazyky přepisu, model Whisperu, model Clauda, přepis do poznámky, zápis do „Moje úkoly.md“, název složky poznámek, počet vláken CPU, nezpracovávat během nahrávání (výchozí zapnuto), zpracovat až když Mac N minut nepoužíváš.
-  - **Vzhled a diagnostika:** ikona v menu baru (duch / symbol), čas nahrávání vedle ikony, podrobné logování.
+  - **Vzhled a diagnostika:** ikona v menu baru (duch / symbol), podrobné logování.
 - Checklist připravenosti (oprávnění, vault, token, Claude, uv a pipeline, start po přihlášení) s tlačítky, které rovnou vyžádají oprávnění nebo otevřou správné místo.
 - Varování v panelu a v checklistu, když není vybraný Obsidian vault.
 - Pipeline respektuje nová nastavení: jazyky přepisu, model Whisperu, model Clauda, počet vláken, složka poznámek, přepis v poznámce, zápis úkolů do seznamu a podrobné logování (`--verbose`).
@@ -25,7 +25,7 @@ Sekci `[Unreleased]` doplňuj průběžně; `scripts/release.sh` z ní při vyd�
 - Pipeline dostává z appky `--verbose` při podrobném logování a počet vláken z nastavení; z prostředí se odstraňují všechny proměnné `ANTHROPIC_*` a `CLAUDE_CODE_*`.
 
 ### Opraveno
-- Appka padala (zamrzla a pak ji systém ukončil) hned po „Nahrávat“, když byl zapnutý čas nahrávání v menu baru: živě aktualizovaný čas v ikoně vyvolával nekonečné překreslování. Čas se teď mění jednou za minutu a obrázek ducha se kreslí jen jednou.
+- Appka padala (zamrzla a pak ji systém ukončil) hned po „Nahrávat“, když byl zapnutý čas nahrávání v menu baru: měnící se ikona vyvolávala nekonečné překreslování. Čas vedle ikony je odstraněný (délku nahrávání ukazuje panel), obrázek ducha se kreslí jen jednou.
 - `audio.m4a` byl zrychlený a měl jen třetinu skutečné délky, když mikrofon (např. sluchátka Arctis v režimu headset) přepnul zvukové zařízení na 16 kHz. Obě stopy se teď značí skutečnou frekvencí zařízení. Týká se i starších nahrávek.
 - Fronta pipeline se zasekla, když se zpracování nepodařilo spustit (chybějící složka pipeline, smazaná nahrávka).
 - „Přepsat znovu od začátku“ u právě zpracovávané nahrávky přepisovalo její `status.json`; teď se provede po skončení běžícího zpracování.

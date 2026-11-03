@@ -17,7 +17,6 @@ struct AdvancedSettingsTab: View {
                     Text("Duch").tag("ghost")
                     Text("Symbol").tag("symbol")
                 }
-                Toggle("Zobrazit čas nahrávání v menu baru", isOn: model.configBinding(\.showTimerInMenuBar))
             } header: {
                 Text("Vzhled")
             }

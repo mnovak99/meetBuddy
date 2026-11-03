@@ -74,8 +74,6 @@ nonisolated struct AppConfig: Equatable, Sendable {
     // MARK: Appearance and diagnostics
     /// "ghost" (the app's mascot) or "symbol" (a plain SF Symbol).
     var menuBarIcon = "ghost"
-    /// Show the elapsed time next to the menu bar icon while recording.
-    var showTimerInMenuBar = false
     /// Verbose logs (detection signals every poll, pipeline debug output).
     var debugLogging = false
 
@@ -138,7 +136,7 @@ nonisolated extension AppConfig: Codable {
         case transcriptLanguages, whisperModel, claudeModel, noteIncludeTranscript, appendTasksToList
         case notesFolder, pipelineThreads, pauseProcessingWhileRecording, idleBeforeProcessingMinutes
         case audioRetentionDays, storageLimitGB
-        case menuBarIcon, showTimerInMenuBar, debugLogging
+        case menuBarIcon, debugLogging
         case pipelinePath, uvPath
     }
 
@@ -188,7 +186,6 @@ nonisolated extension AppConfig: Codable {
         try read(.audioRetentionDays, into: &audioRetentionDays)
         try read(.storageLimitGB, into: &storageLimitGB)
         try read(.menuBarIcon, into: &menuBarIcon)
-        try read(.showTimerInMenuBar, into: &showTimerInMenuBar)
         try read(.debugLogging, into: &debugLogging)
         try read(.pipelinePath, into: &pipelinePath)
         try read(.uvPath, into: &uvPath)
